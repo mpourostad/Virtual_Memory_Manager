@@ -14,23 +14,12 @@
 // #include <tuple>
 
 using namespace std;
-const int MAX_FRAMES = 128;
-const int MAX_VPAGES = 64;
 
-class FrameTable{
-    public:
-    unsigned long virtual_address:32;
-    unsigned long mapped:1;
-    int pid;
-    FrameTable();
-};
-FrameTable::FrameTable(){
-    virtual_address = 0;
-    mapped = 0;
-    pid = -1;
-}
-FrameTable frame_table_array[MAX_FRAMES];
-queue <FrameTable*> free_list;
+const int MAX_FRAMES = 16;
+const int MAX_VPAGES = 64;
+int hand = 0;
+
+
 
 class PTE{
     public:
@@ -58,12 +47,19 @@ class VMA{
     unsigned int end_page;
     unsigned int write_protected:1;
     unsigned int filemapped:1;
-
+    VMA(unsigned int, unsigned int, unsigned int, unsigned int);
 };
+VMA::VMA(unsigned int start, unsigned int end, unsigned int w_r, unsigned int f_mapped){
+    start_page = start;
+    end_page = end;
+    write_protected = w_r;
+    filemapped = f_mapped;
+}
 class Process{
     public:
     int pid;
-    vector <vector <int> > vma;
+    // vector <vector <int> > vma;
+    vector <VMA*> vma;
     PTE page_table[MAX_VPAGES];
     unsigned long segv, segprot, maps, unmaps, ins, outs, zeros, fins, fouts;
     Process(int);
@@ -73,38 +69,95 @@ Process::Process(int id){
     // segv, segprot, maps, unmaps, ins, outs, zeros, fins, fouts = 0, 0, 0, 0, 0, 0, 0, 0, 0;
 
 }
-FrameTable *allocate_from_free_list (){
-    for (int i = 0; i < sizeof(frame_table_array)/sizeof(*frame_table_array); i++){
-        if (frame_table_array[i].mapped == 0){
-            return &frame_table_array[i];
-        }
+class FrameTable{
+    public:
+    unsigned long virtual_address:32;
+    unsigned long mapped:1;
+    Process *p;
+    FrameTable();
+};
+FrameTable::FrameTable(){
+    virtual_address = 0;
+    mapped = 0;
+    p = nullptr;
+}
+FrameTable frame_table_array[MAX_FRAMES];
+queue <FrameTable*> free_list;
+// queue <FrameTable*> used_list;
+FrameTable *get_frame (){
+    // for (int i = 0; i < sizeof(frame_table_array)/sizeof(*frame_table_array); i++){
+    //     if (frame_table_array[i].mapped == 0){
+    //         return &frame_table_array[i];
+    //     }
 
+    // }
+    FrameTable *f_ptr;
+    if (!free_list.empty()){
+        f_ptr  = free_list.front();
+        free_list.pop();
+        // used_list.push(f_ptr);
+        return f_ptr;
     }
+    
     return nullptr;
 }
-// class Pager {
-//     virtual frame_t* select_victim_frame() = 0; // virtual base class
-// };
-// void simulation(){
-//     typedef struct { ... } pte_t; // can only be total of 32-bit size and will check on this typedef struct { ... } frame_t;
-//     frame_t frame_table[MAX_FRAMES];
-    
-//     frame_t *get_frame() {
-//     frame_t *frame = allocate_frame_from_free_list();
-//     if (frame == NULL) frame = THE_PAGER->select_victim_frame();
-//         return frame;
-//     }
-//     while (get_next_instruction(&operation, &vpage)) {
-//     // handle special case of “c” and “e” instruction // now the real instructions for read and write pte_t *pte = &current_process->page_table[vpage]; if ( ! pte->present) {
-//     // this in reality generates the page fault exception and now you execute
-//     // verify this is actually a valid page in a vma if not raise error and next inst frame_t *newframe = get_frame();
-//     //-> figure out if/what to do with old frame if it was mapped
-//     // see general outline in MM-slides under Lab3 header and writeup below
-//     // see whether and how to bring in the content of the access page.
-//     }
-//     // check write protection
-//     // simulate instruction execution by hardware by updating the R/M PTE bits update_pte(read/modify) bits based on operations.
+class Pager {
+    public:
+    virtual FrameTable* select_victim_frame() = 0; // virtual base class
+};
+class FIFO: public Pager{
+    FrameTable  *select_victim_frame(){
+        int flag = 0;
+        if (hand >= sizeof(frame_table_array) / sizeof(*frame_table_array)){
+            hand = -1;
+            // frame_table_array[hand].mapped = 0;
+        }
+        
+        hand++;
+        for (int i = 0; i < sizeof(frame_table_array[hand].p->page_table) / sizeof(*frame_table_array[hand].p->page_table); i++){
+            for (int j = 0; j < sizeof(frame_table_array[hand].p->page_table) / sizeof (*frame_table_array[hand].p->page_table); j++){
+                if ( frame_table_array[hand].p->page_table[j].physical_frame == hand ){
+                    frame_table_array[hand].p->page_table[j].mapped = 0;
+                    if (frame_table_array[hand].p->page_table[j].modified == 1){
+                        frame_table_array[hand].p->outs++;
+                        cout<< "OUT" << endl;
+                    }
+                    else if (frame_table_array[hand].p->page_table[j].referenced == 1){
+                        frame_table_array[hand].p->fouts++;
+                        cout << "FOUT" << endl;
+                    }
+                    frame_table_array[hand].p->page_table[j].referenced = 0;
+                    frame_table_array[hand].p->page_table[j].modified = 0;
+                    frame_table_array[hand].p->page_table[j].paged_out = 1; 
+                    frame_table_array[hand].p->page_table[j].write_protect = 0;
+                    frame_table_array[hand].p->page_table[j].present = 0;
+                    frame_table_array[hand].p->page_table[j].mapped = 0;
+                    frame_table_array[hand].p = nullptr;
+                    flag = 1;
+                    break;
+                    
+                }
+            }
+            if (flag == 1){
+                break;
+            }
+        }
+        return &frame_table_array[hand];
+
+    }
+};
+
+// void simulation(Pager *the_Pager){
+ 
 // }
+bool can_vpage_accessed(Process *ptr, int vpage){
+    for (int j = 0; j < ptr->vma.size(); j++){
+        if (vpage >= ptr->vma[j]->start_page && vpage <= ptr->vma[j]->end_page ){
+            return true;
+        }
+    }
+    return false;
+}
 void print_stats(Process* proc){
 
     printf("PROC[%d]: U=%lu M=%lu I=%lu O=%lu FI=%lu FO=%lu Z=%lu SV=%lu SP=%lu\n",
@@ -119,7 +172,7 @@ void print_frame_t(){
             cout << "* ";
         }
         else{
-            printf("%d:%d", frame_table_array[i].pid, frame_table_array[i].virtual_address);
+            printf("%d:%d", frame_table_array[i].p->pid, frame_table_array[i].virtual_address);
         }
         
     }
@@ -167,13 +220,14 @@ void print_page_t(vector<Process*> process_ptr){
 }
 int main(int argc, char** argv){
     // MAX_FRAMES = 16;
-    ifstream file(argv[1]);
-    string str;
-    vector < vector < int > > total_vma;
-    vector <int> vma;
-    vector <Process*> process_ptr;
     vector <char> instruction_char;
     vector <int> instruction_int;
+    ifstream file(argv[1]);
+    string str;
+    // vector < vector < int > > total_vma;
+    vector <VMA*> total_vma;
+    vector <int> vma;
+    vector <Process*> process_ptr;
     int process_number= 0;
     int flag = 0;
     int num_p = -1;
@@ -190,29 +244,21 @@ int main(int argc, char** argv){
         // int a, b, c, d;
         int start, end, w_p, m;
         // if (success == 4){
-        success = sscanf(stoc, "%d %d %d %d", &start, &end, &w_p, &m);
+        success = sscanf(stoc, "%u %u %u %u", &start, &end, &w_p, &m);
         // if (num_vma != 0){
         if (success == 4){
 
-            vma.push_back(start);
-            vma.push_back(end);
-            vma.push_back(w_p);
-            vma.push_back(m);
-            total_vma.push_back(vma);
+            // vma.push_back(start);
+            // vma.push_back(end);
+            // vma.push_back(w_p);
+            // vma.push_back(m);
             
-            // for (int i = 0; i < vma.size(); i++){
-            //     cout<< vma[i] << " ";
-            // }           
-            // cout << endl;
-            vma.clear();
-            // for (int i = 0; i < total_vma.size(); i++){
-            //     for (int j = 0; j < total_vma[i].size(); j++){
-            //         cout<< total_vma[i][j] << " ";
-            //     }
-            //     cout<< endl;
-            // }
+            VMA *v;
+            v = new VMA(start, end, w_p, m);
+            total_vma.push_back(v);
+            // total_vma.push_back(vma);
+            // vma.clear();
             num_vma --;
-            // cout << "num_vma " << num_vma << endl;
 
         }           
            
@@ -281,6 +327,44 @@ int main(int argc, char** argv){
     // }
     // cout << "frame_table_array " << frame_table_array[0].pid << endl;
     // print_frame_t();
+    Pager *the_Pager = new FIFO;
+    // cout << "f_size " << sizeof(frame_table_array) / sizeof(*frame_table_array);
+    // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ simulation
+    FrameTable *frame = get_frame();
+    if (frame == nullptr){
+        frame = the_Pager->select_victim_frame();
+    }
+    Process *ptr;
+    // cout << "instruction_char "<< instruction_char.size() << endl;
+    for (int i = 0; i < instruction_char.size(); i++){
+        printf("%d: ==> %c %d \n", i, instruction_char[i], instruction_int[i]);
+        if (instruction_char[i] == 'c'){
+            for (int j = 0; j < process_ptr.size(); j++){
+                if (process_ptr[j]->pid == instruction_int[i]){
+                    ptr = process_ptr[j];
+                    break;
+                }
+            }
+        }
+        if (!can_vpage_accessed(ptr, instruction_int[i])){
+            cout<< "SEGV" <<endl;
+            ptr->segv++;
+            continue;
+
+        }
+        
+    }
+    // while (get_next_instruction(&operation, &vpage)) {
+    // // handle special case of “c” and “e” instruction // now the real instructions for read and write pte_t *pte = &current_process->page_table[vpage]; if ( ! pte->present) {
+    // // this in reality generates the page fault exception and now you execute
+    // // verify this is actually a valid page in a vma if not raise error and next inst frame_t *newframe = get_frame();
+    // //-> figure out if/what to do with old frame if it was mapped
+    // // see general outline in MM-slides under Lab3 header and writeup below
+    // // see whether and how to bring in the content of the access page.
+    // }
+    // check write protection
+    // simulate instruction execution by hardware by updating the R/M PTE bits update_pte(read/modify) bits based on operations.
+
 
     return 0;
 }
