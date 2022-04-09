@@ -32,7 +32,9 @@ class PTE{
     unsigned int paged_out:1;
     unsigned int file_mapped:1;
     unsigned int accessed:1;
+    unsigned int unmapped:1;
     unsigned int physical_frame:7;
+    
     PTE();
 };
 PTE::PTE(){
@@ -44,6 +46,7 @@ PTE::PTE(){
     file_mapped = 0; 
     physical_frame = 0;
     accessed = 0;
+    unmapped = 0;
 }
 class VMA{
     public:
@@ -122,10 +125,16 @@ void unmap(PTE *pte, Process *ptr, int vpage){
             ptr->fouts++;
         }
         else{
-        cout<< " OUT" << endl;
-        cost += 2700;
-        ptr->outs++;
+            cout<< " OUT" << endl;
+            cost += 2700;
+            ptr->outs++;
+            
         }
+        pte->modified = 0;
+        pte -> referenced = 0;
+        pte->physical_frame = 0;
+        pte ->present = 0;
+        pte->unmapped = 1;
         
     }
 }
@@ -136,9 +145,9 @@ class Pager {
 class FIFO: public Pager{
     Frame  *select_victim_frame(){
         int flag = 0;
-        if (hand >= sizeof(frame_table) / sizeof(*frame_table)){
+        
+        if (hand >= sizeof(frame_table) / sizeof(*frame_table) - 1){
             hand = -1;
-            // frame_table_array[hand].mapped = 0;
         }
         
         hand++;
@@ -310,6 +319,7 @@ void set_write_protected_bit(Process *ptr, unsigned int vpage){
 
 int main(int argc, char** argv){
     // MAX_FRAMES = 16;
+    cout << sizeof(frame_table) / sizeof(*frame_table) - 1;
     hand = -1;
     vector <char> instruction_char;
     vector <int> instruction_int;
@@ -408,23 +418,10 @@ int main(int argc, char** argv){
         frame_table[i].frame_index = i;
         free_list.push(&frame_table[i]);
     }
-    // for (int i = 0; i < instruction_char.size(); i++){
-    //     cout << instruction_char[i] << " " << instruction_int[i] << endl;
-    // }
-
-    // }
-    // cout << "frame_table_array " << frame_table_array[0].pid << endl;
-    // print_frame_t();
     Pager *the_Pager = new FIFO;
-    // cout << "f_size " << sizeof(frame_table_array) / sizeof(*frame_table_array);
     // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ simulation
-    // FrameTable *frame = get_frame();
-    // if (frame == nullptr){
-    //     frame = the_Pager->select_victim_frame();
-    // }
     Process *current_process;
-    // cout << "instruction_char "<< instruction_char.size() << endl;
-    cost += instruction_char.size() - 1;
+    // cost += instruction_char.size() - 1;
     for (int i = 0; i < instruction_char.size(); i++){
         printf("%d: ==> %c %d \n", i, instruction_char[i], instruction_int[i]);
         if (instruction_char[i] == 'c'){
@@ -438,39 +435,18 @@ int main(int argc, char** argv){
             }
             continue;
         }
-        // int index_vma = can_vpage_accessed(current_process, instruction_int[i]);
-        // if (index_vma == -1){
-        //     cout<< "SEGV" <<endl;
-        //     current_process->segv++;
-        //     continue;
-        // }
         PTE *pte = &current_process->page_table[instruction_int[i]];
         if ((!pte->paged_out) && (!pte->present)){
-            // if (!can_vpage_accessed(current_process, instruction_int[i])){
-            //     cout<< "SEGV" <<endl;
-            //     current_process->segv++;
-            //     continue;
-            // }
             set_bits(current_process, instruction_int[i]);
-            // set_accessed_bit(current_process, instruction_int[i]);
-            // set_file_mapped_bit(current_process, instruction_int[i]);
-            // set_write_protected_bit(current_process, instruction_int[i]);
         }
         if (!pte->accessed){
             cost += 340;
             cout<< " SEGV" <<endl;
             current_process->segv++;
+            cost++;
             continue;
         }
         if ( ! pte->present) {
-            // Frame *frame = get_frame();
-            // if (frame == nullptr){
-            //     frame = the_Pager->select_victim_frame();
-            // }
-            
-            // frame->mapped = 1;
-            // frame->virtual_address = instruction_int[i];
-            // frame->p = current_process;
             Frame *frame;
             frame = allocate_frame();
             if (frame == nullptr){
@@ -487,11 +463,16 @@ int main(int argc, char** argv){
                 current_process->zeros++;
                 
             }
-            else if (pte ->paged_out){
+            else if (pte ->paged_out && !pte ->file_mapped){
                 cout << " IN" << endl;
                 cost += 3100;
 
                 current_process->ins++;
+            }
+            else if (pte ->file_mapped){
+                cout << " FIN" << endl;
+                cost += 2800;
+                current_process->fins++;
             }
             // page_fault(current_process, pte, the_Pager, instruction_int[i]);
             cout << " MAP " << frame->frame_index << endl;
@@ -503,10 +484,20 @@ int main(int argc, char** argv){
         }
         if (instruction_char[i] == 'r'){
             pte->referenced = 1;
+            cost ++;
         }
-        else if (instruction_char[i] == 'w'){
+        else if (instruction_char[i] == 'w' && !pte ->write_protect){
             pte -> referenced = 1;
             pte->modified = 1;
+            cost ++;
+        }
+        else if (instruction_char[i] == 'w' && pte ->write_protect){
+            pte -> referenced = 1;
+            current_process -> segprot++;
+            cout << " SEGPROT" << endl;
+            cost ++;
+            cost += 420;
+            
         }
 
         
@@ -515,7 +506,7 @@ int main(int argc, char** argv){
     print_frame_t();
     print_stats(process_ptr);
     printf("TOTALCOST %lu %lu %lu %llu %lu\n",
-              instruction_char.size(), ctx_switches, process_exits, cost, 4 * process_ptr.size());
+              instruction_char.size(), ctx_switches, process_exits, cost, sizeof(process_ptr[0]->page_table) /MAX_VPAGES);
     // while (get_next_instruction(&operation, &vpage)) {
     // // handle special case of “c” and “e” instruction // now the real instructions for read and write pte_t *pte = &current_process->page_table[vpage]; if ( ! pte->present) {
     // // this in reality generates the page fault exception and now you execute
