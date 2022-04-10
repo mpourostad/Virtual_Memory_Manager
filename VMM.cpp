@@ -32,7 +32,7 @@ class PTE{
     unsigned int paged_out:1;
     unsigned int file_mapped:1;
     unsigned int accessed:1;
-    unsigned int unmapped:1;
+    unsigned int mapped:1;
     unsigned int physical_frame:7;
     
     PTE();
@@ -46,7 +46,7 @@ PTE::PTE(){
     file_mapped = 0; 
     physical_frame = 0;
     accessed = 0;
-    unmapped = 0;
+    mapped = 0;
 }
 class VMA{
     public:
@@ -130,13 +130,31 @@ void unmap(PTE *pte, Process *ptr, int vpage){
             ptr->outs++;
             
         }
-        pte->modified = 0;
-        pte -> referenced = 0;
-        pte->physical_frame = 0;
-        pte ->present = 0;
-        pte->unmapped = 1;
         
     }
+    pte->modified = 0;
+    pte -> referenced = 0;
+    pte->physical_frame = 0;
+    pte ->present = 0;
+    pte->mapped = 0;
+}
+void unmap_exit(PTE *pte, Process *ptr, int vpage){
+    cost += 400;
+    printf(" UNMAP %d:%d\n", ptr->pid, vpage);
+    if (pte->modified){
+        pte->paged_out = 1;
+        if (pte -> file_mapped){
+            cout << " FOUT" << endl;
+            cost += 2400;
+            ptr->fouts++;
+        }
+        
+    }
+    pte->modified = 0;
+    pte -> referenced = 0;
+    pte->physical_frame = 0;
+    pte ->present = 0;
+    pte->mapped = 0;
 }
 class Pager {
     public:
@@ -183,7 +201,7 @@ class FIFO: public Pager{
         PTE *pte = &frame_table[hand].p->page_table[frame_table[hand].virtual_address];
         unmap(pte, frame_table[hand].p, frame_table[hand].virtual_address);
         
-        frame_table[hand].p->page_table[frame_table[hand].virtual_address].present = 0;
+        // frame_table[hand].p->page_table[frame_table[hand].virtual_address].present = 0;
         frame_table[hand].p = nullptr;
         frame_table[hand].virtual_address = 0;
         return &frame_table[hand];
@@ -195,19 +213,19 @@ class FIFO: public Pager{
 // void simulation(Pager *the_Pager){
  
 // }
-void page_fault(Process *ptr, PTE *pte, Pager *the_Pager, int vpage){
-    Frame *frame;
-    frame = allocate_frame();
-    if (frame == nullptr){
-        frame = the_Pager->select_victim_frame();
-    }
-    // pte->mapped = 1;
-    pte->physical_frame = frame->frame_index;
-    pte->present = 1;
-    frame->p = ptr;
-    frame->virtual_address = vpage;
-    cout << " MAP " << frame->frame_index << endl;
-}
+// void page_fault(Process *ptr, PTE *pte, Pager *the_Pager, int vpage){
+//     Frame *frame;
+//     frame = allocate_frame();
+//     if (frame == nullptr){
+//         frame = the_Pager->select_victim_frame();
+//     }
+//     // pte->mapped = 1;
+//     pte->physical_frame = frame->frame_index;
+//     pte->present = 1;
+//     frame->p = ptr;
+//     frame->virtual_address = vpage;
+//     cout << " MAP " << frame->frame_index << endl;
+// }
 // void mapping(PTE *pte, Process *ptr, Frame *frame){
     
 // }
@@ -316,6 +334,11 @@ void set_write_protected_bit(Process *ptr, unsigned int vpage){
     // return false;
 
 }
+// void load_free_pool(){
+//     for (int i = 0; i < sizeof(frame_table)/sizeof(*frame_table); i++){
+//         free_list.push(&frame_table[i]);
+//     }
+// }
 
 int main(int argc, char** argv){
     // MAX_FRAMES = 16;
@@ -435,6 +458,22 @@ int main(int argc, char** argv){
             }
             continue;
         }
+        else if (instruction_char[i] == 'e'){
+            cost += 1250;
+            process_exits++;
+            for (int j = 0; j < sizeof(current_process->page_table) / sizeof(*current_process->page_table); j++){
+                if (current_process->page_table[j].mapped){
+                    free_list.push(&frame_table[current_process->page_table[j].physical_frame]); 
+                    
+                    frame_table[current_process->page_table[j].physical_frame].p = nullptr;
+                    frame_table[current_process->page_table[j].physical_frame].virtual_address = 0;
+                    unmap_exit(&current_process->page_table[j], current_process, j);
+                    current_process->unmaps++;
+                    
+                }
+            }
+            continue;
+        }
         PTE *pte = &current_process->page_table[instruction_int[i]];
         if ((!pte->paged_out) && (!pte->present)){
             set_bits(current_process, instruction_int[i]);
@@ -478,6 +517,7 @@ int main(int argc, char** argv){
             cout << " MAP " << frame->frame_index << endl;
             cost += 300;
             current_process->maps++;
+            pte ->mapped = 1;
             // else if (pte -> mapped){
             //     cout << 
             // }
