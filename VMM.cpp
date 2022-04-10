@@ -33,6 +33,7 @@ class PTE{
     unsigned int file_mapped:1;
     unsigned int accessed:1;
     unsigned int mapped:1;
+    unsigned int setBits_flag:1;
     unsigned int physical_frame:7;
     
     PTE();
@@ -47,6 +48,7 @@ PTE::PTE(){
     physical_frame = 0;
     accessed = 0;
     mapped = 0;
+    setBits_flag = 0;
 }
 class VMA{
     public:
@@ -142,7 +144,7 @@ void unmap_exit(PTE *pte, Process *ptr, int vpage){
     cost += 400;
     printf(" UNMAP %d:%d\n", ptr->pid, vpage);
     if (pte->modified){
-        pte->paged_out = 1;
+        // pte->paged_out = 1;
         if (pte -> file_mapped){
             cout << " FOUT" << endl;
             cost += 2400;
@@ -150,6 +152,10 @@ void unmap_exit(PTE *pte, Process *ptr, int vpage){
         }
         
     }
+    // else{
+    //     pte ->paged_out = 0;
+    // }
+    pte ->paged_out = 0;
     pte->modified = 0;
     pte -> referenced = 0;
     pte->physical_frame = 0;
@@ -162,41 +168,41 @@ class Pager {
 };
 class FIFO: public Pager{
     Frame  *select_victim_frame(){
-        int flag = 0;
         
         if (hand >= sizeof(frame_table) / sizeof(*frame_table) - 1){
             hand = -1;
         }
         
         hand++;
-        // for (int i = 0; i < sizeof(frame_table[hand].p->page_table) / sizeof(*frame_table[hand].p->page_table); i++){
-        // for (int j = 0; j < sizeof(frame_table[hand].p->page_table) / sizeof (*frame_table[hand].p->page_table); j++){
-        //     if ( frame_table[hand].p->page_table[j].physical_frame == hand ){
-        //         frame_table[hand].p->page_table[j].mapped = 0;
-        //         if (frame_table[hand].p->page_table[j].modified == 1){
-        //             frame_table[hand].p->outs++;
-        //             cout<< "OUT" << endl;
-        //         }
-        //         else if (frame_table[hand].p->page_table[j].referenced == 1){
-        //             frame_table[hand].p->fouts++;
-        //             cout << "FOUT" << endl;
-        //         }
-        //         frame_table[hand].p->page_table[j].referenced = 0;
-        //         frame_table[hand].p->page_table[j].modified = 0;
-        //         frame_table[hand].p->page_table[j].paged_out = 1; 
-        //         frame_table[hand].p->page_table[j].write_protect = 0;
-        //         frame_table[hand].p->page_table[j].present = 0;
-        //         frame_table[hand].p->page_table[j].mapped = 0;
-        //         frame_table[hand].p = nullptr;
-        //         flag = 1;
-        //         break;
-                
-        //     }
-        // }
-        //     if (flag == 1){
-        //         break;
-        //     }
-        // }
+        frame_table[hand].p->unmaps++;
+        PTE *pte = &frame_table[hand].p->page_table[frame_table[hand].virtual_address];
+        unmap(pte, frame_table[hand].p, frame_table[hand].virtual_address);
+        
+        // frame_table[hand].p->page_table[frame_table[hand].virtual_address].present = 0;
+        frame_table[hand].p = nullptr;
+        frame_table[hand].virtual_address = 0;
+        return &frame_table[hand];
+
+    }
+};
+class Clock:public Pager{
+    Frame *select_victim_frame(){
+        if (hand >= sizeof(frame_table) / sizeof(*frame_table) - 1){
+            // cout << "this" << endl;
+            hand = -1;
+        }
+        
+        hand++;
+        
+        while(frame_table[hand].p->page_table[frame_table[hand].virtual_address].referenced){
+            // cout << "hand: " << hand << "referenced: " << frame_table[hand].p->page_table[frame_table[hand].virtual_address].referenced << endl;
+            
+            frame_table[hand].p->page_table[frame_table[hand].virtual_address].referenced = 0;
+            hand++;
+            if (hand > sizeof(frame_table) / sizeof(*frame_table) - 1){
+                hand = 0;
+            }
+        }
         frame_table[hand].p->unmaps++;
         PTE *pte = &frame_table[hand].p->page_table[frame_table[hand].virtual_address];
         unmap(pte, frame_table[hand].p, frame_table[hand].virtual_address);
@@ -209,26 +215,6 @@ class FIFO: public Pager{
     }
 };
 
-
-// void simulation(Pager *the_Pager){
- 
-// }
-// void page_fault(Process *ptr, PTE *pte, Pager *the_Pager, int vpage){
-//     Frame *frame;
-//     frame = allocate_frame();
-//     if (frame == nullptr){
-//         frame = the_Pager->select_victim_frame();
-//     }
-//     // pte->mapped = 1;
-//     pte->physical_frame = frame->frame_index;
-//     pte->present = 1;
-//     frame->p = ptr;
-//     frame->virtual_address = vpage;
-//     cout << " MAP " << frame->frame_index << endl;
-// }
-// void mapping(PTE *pte, Process *ptr, Frame *frame){
-    
-// }
 void set_accessed_bit(Process *ptr, int vpage){
     for (int j = 0; j < ptr->vma.size(); j++){
         if (vpage >= ptr->vma[j]->start_page && vpage <= ptr->vma[j]->end_page ){
@@ -471,12 +457,18 @@ int main(int argc, char** argv){
                     current_process->unmaps++;
                     
                 }
+                else{
+                    current_process->page_table[j].paged_out = 0;
+                    current_process->page_table[j].modified = 0;
+                    current_process->page_table[j].referenced = 0;
+                }
             }
             continue;
         }
         PTE *pte = &current_process->page_table[instruction_int[i]];
-        if ((!pte->paged_out) && (!pte->present)){
+        if (!pte->setBits_flag){
             set_bits(current_process, instruction_int[i]);
+            pte->setBits_flag = 1;
         }
         if (!pte->accessed){
             cost += 340;
