@@ -20,6 +20,7 @@ const int MAX_VPAGES = 64;
 int hand;
 unsigned long ctx_switches, process_exits;
 unsigned long long cost;
+int count_inst;
 
 
 
@@ -206,14 +207,157 @@ class Clock:public Pager{
         frame_table[hand].p->unmaps++;
         PTE *pte = &frame_table[hand].p->page_table[frame_table[hand].virtual_address];
         unmap(pte, frame_table[hand].p, frame_table[hand].virtual_address);
-        
-        // frame_table[hand].p->page_table[frame_table[hand].virtual_address].present = 0;
         frame_table[hand].p = nullptr;
         frame_table[hand].virtual_address = 0;
         return &frame_table[hand];
 
     }
 };
+class NRU: public Pager{
+    public:
+    int index;
+    int index_1;
+    int index_2;
+    int index_3;
+    Frame *frame_class1;
+    Frame *frame_class2;
+    Frame *frame_class3;
+    bool flag_class1;
+    bool flag_class2;
+    bool flag_class3;
+    Frame *select_victim_frame(){
+        if (count_inst >= 50){
+            daemon();
+            count_inst = 0;
+        }
+        int vpage;
+        
+        if (index >= sizeof(frame_table)/sizeof(*frame_table)){
+            index = 0;
+            // flag_class1 = false;
+            // flag_class2 = false;
+            // flag_class3 = false;
+            // if (flag_class1 == false && flag_class2 == false && flag_class3 == false){
+            //     index = 0;
+            // }
+            // else if (flag_class2 == true){
+            //     index = index_2;
+            // }
+            // else {
+            //     index = index_3;
+            // }
+        }
+        cout << "index " << index << endl;
+        for (int i = index; i < sizeof(frame_table)/sizeof(*frame_table); i++){
+            vpage = frame_table[i].virtual_address;
+            if (!frame_table[i].p->page_table[vpage].referenced && !frame_table[i].p->page_table[vpage].modified){
+                cout << "flag_class0" << endl;
+                frame_table[i].p->unmaps++;
+                PTE *pte = &frame_table[i].p->page_table[vpage];
+                unmap(pte, frame_table[i].p, vpage);
+                frame_table[i].p = nullptr;
+                frame_table[i].virtual_address = 0;
+                index = i + 1;
+                return &frame_table[i];
+            }
+            else if (!frame_table[i].p->page_table[vpage].referenced && frame_table[i].p->page_table[vpage].modified){
+                
+                if (!flag_class1){
+                    // cout << "i " << i << endl;
+                    cout << "flag_class1" << endl;
+                    frame_class1 = &frame_table[i];
+                    index_1 = i + 1;
+                    flag_class1 = true;
+                }
+            }
+            else if (frame_table[i].p->page_table[vpage].referenced && !frame_table[i].p->page_table[vpage].modified){
+               
+                if (!flag_class2){
+                    // cout << "thiiiiiis" << endl;
+                    // cout << "i " << i << endl;
+                    cout << "flag_class2" << endl;
+                    frame_class2 = &frame_table[i];
+                    index_2 = i + 1;
+                    flag_class2 = true;
+                }
+            }
+            else{
+                if (!flag_class3){
+                    cout << "++++++++++++++++++++++++++++++++++++++++++++++" << index_3 << endl;
+                    index_3 = i + 1;
+                    frame_class3 = &frame_table[i];
+                    flag_class3 = true;
+                }
+            }
+        }
+        Frame *temp;
+        if (frame_class1 != nullptr){
+            cout << "class1" << endl;
+            index = index_1;
+            temp = frame_class1;
+            frame_class1 = nullptr;
+            vpage = temp->virtual_address;
+            // cout << "vpage " << vpage << endl;
+            temp->p->unmaps++;
+            PTE *pte = &temp->p->page_table[vpage];
+            unmap(pte, temp->p, vpage);
+            temp->p = nullptr;
+            temp->virtual_address = 0;
+            flag_class1 = false;
+            return temp;
+        }
+        else if (frame_class2 != nullptr){
+            cout << "class2" << endl;
+            // cout << "index_2 " << index_2 << endl;
+            temp = frame_class2;
+            frame_class2 = nullptr;
+            index = index_2;
+            vpage = temp->virtual_address;
+            temp->p->unmaps++;
+            PTE *pte = &temp->p->page_table[vpage];
+            unmap(pte, temp->p, vpage);
+            temp->p = nullptr;
+            temp->virtual_address = 0;
+            flag_class2 = false;
+            return temp;
+        }
+        else{
+            cout << "class3" << endl;
+            // cout << "index_3 " << index_3 << endl;
+            // cout << "frame_class3" << endl;
+            temp = frame_class3;
+            frame_class3 = nullptr;
+            index = index_3;
+            vpage = temp->virtual_address;
+            temp->p->unmaps++;
+            PTE *pte = &temp->p->page_table[vpage];
+            unmap(pte, temp->p, vpage);
+            temp->p = nullptr;
+            temp->virtual_address = 0;
+            flag_class3 = false;
+            return temp;
+        }
+        
+    }
+    void daemon(){
+        for (int i =   0; i < sizeof(frame_table)/sizeof(*frame_table); i++){
+            frame_table[i].p->page_table[frame_table[i].virtual_address].referenced = 0;
+        }
+    }
+    NRU();
+};
+NRU::NRU(){
+    index = 0;
+    index_1 = 0; 
+    index_2 = 0;
+    index_3 = 0;
+    frame_class1 = nullptr;
+    frame_class2 = nullptr;
+    frame_class3 = nullptr;
+    bool flag_class1 = false;
+    bool flag_class2 = false;
+    bool flag_class3 = false;
+}
 
 void set_accessed_bit(Process *ptr, int vpage){
     for (int j = 0; j < ptr->vma.size(); j++){
@@ -328,8 +472,9 @@ void set_write_protected_bit(Process *ptr, unsigned int vpage){
 
 int main(int argc, char** argv){
     // MAX_FRAMES = 16;
-    cout << sizeof(frame_table) / sizeof(*frame_table) - 1;
+    // cout << sizeof(frame_table) / sizeof(*frame_table) - 1;
     hand = -1;
+    count_inst = 0; 
     vector <char> instruction_char;
     vector <int> instruction_int;
     ifstream file(argv[1]);
@@ -427,11 +572,12 @@ int main(int argc, char** argv){
         frame_table[i].frame_index = i;
         free_list.push(&frame_table[i]);
     }
-    Pager *the_Pager = new FIFO;
+    Pager *the_Pager = new NRU;
     // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ simulation
     Process *current_process;
     // cost += instruction_char.size() - 1;
     for (int i = 0; i < instruction_char.size(); i++){
+        count_inst++;
         printf("%d: ==> %c %d \n", i, instruction_char[i], instruction_int[i]);
         if (instruction_char[i] == 'c'){
             ctx_switches++;
