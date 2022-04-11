@@ -232,23 +232,17 @@ class NRU: public Pager{
         }
         int vpage;
         
-        if (index >= sizeof(frame_table)/sizeof(*frame_table)){
-            index = 0;
-            // flag_class1 = false;
-            // flag_class2 = false;
-            // flag_class3 = false;
-            // if (flag_class1 == false && flag_class2 == false && flag_class3 == false){
-            //     index = 0;
-            // }
-            // else if (flag_class2 == true){
-            //     index = index_2;
-            // }
-            // else {
-            //     index = index_3;
-            // }
+        if (index >= sizeof(frame_table)/sizeof(*frame_table) - 1){
+            index = -1;
         }
-        cout << "index " << index << endl;
-        for (int i = index; i < sizeof(frame_table)/sizeof(*frame_table); i++){
+        flag_class1 = false;
+        flag_class2 = false;
+        flag_class3 = false;
+        int i = index + 1;
+        // int flag = index;
+        while (true){
+            // cout << "i " << i << endl;
+            // flag = index;
             vpage = frame_table[i].virtual_address;
             if (!frame_table[i].p->page_table[vpage].referenced && !frame_table[i].p->page_table[vpage].modified){
                 cout << "flag_class0" << endl;
@@ -257,7 +251,7 @@ class NRU: public Pager{
                 unmap(pte, frame_table[i].p, vpage);
                 frame_table[i].p = nullptr;
                 frame_table[i].virtual_address = 0;
-                index = i + 1;
+                index = i;
                 return &frame_table[i];
             }
             else if (!frame_table[i].p->page_table[vpage].referenced && frame_table[i].p->page_table[vpage].modified){
@@ -266,33 +260,42 @@ class NRU: public Pager{
                     // cout << "i " << i << endl;
                     cout << "flag_class1" << endl;
                     frame_class1 = &frame_table[i];
-                    index_1 = i + 1;
+                    index_1 = i ;
                     flag_class1 = true;
                 }
             }
             else if (frame_table[i].p->page_table[vpage].referenced && !frame_table[i].p->page_table[vpage].modified){
                
                 if (!flag_class2){
-                    // cout << "thiiiiiis" << endl;
-                    // cout << "i " << i << endl;
-                    cout << "flag_class2" << endl;
                     frame_class2 = &frame_table[i];
-                    index_2 = i + 1;
+                    // cout << "here" << endl;
+                    index_2 = i ;
                     flag_class2 = true;
                 }
             }
             else{
                 if (!flag_class3){
-                    cout << "++++++++++++++++++++++++++++++++++++++++++++++" << index_3 << endl;
-                    index_3 = i + 1;
+                    index_3 = i;
                     frame_class3 = &frame_table[i];
                     flag_class3 = true;
                 }
             }
+            
+            // cout << "i " <<  i << endl;
+            i++;
+            if (i > sizeof(frame_table)/sizeof(*frame_table) - 1){
+                // cout << "here" << endl;
+                i = 0;
+            }
+            if (i - 1 == index ){
+                break;
+            }
+           
+            
         }
         Frame *temp;
         if (frame_class1 != nullptr){
-            cout << "class1" << endl;
+            // cout << "class1" << endl;
             index = index_1;
             temp = frame_class1;
             frame_class1 = nullptr;
@@ -303,7 +306,7 @@ class NRU: public Pager{
             unmap(pte, temp->p, vpage);
             temp->p = nullptr;
             temp->virtual_address = 0;
-            flag_class1 = false;
+            // flag_class1 = false;
             return temp;
         }
         else if (frame_class2 != nullptr){
@@ -318,13 +321,10 @@ class NRU: public Pager{
             unmap(pte, temp->p, vpage);
             temp->p = nullptr;
             temp->virtual_address = 0;
-            flag_class2 = false;
+            // flag_class2 = false;
             return temp;
         }
         else{
-            cout << "class3" << endl;
-            // cout << "index_3 " << index_3 << endl;
-            // cout << "frame_class3" << endl;
             temp = frame_class3;
             frame_class3 = nullptr;
             index = index_3;
@@ -334,7 +334,7 @@ class NRU: public Pager{
             unmap(pte, temp->p, vpage);
             temp->p = nullptr;
             temp->virtual_address = 0;
-            flag_class3 = false;
+            // flag_class3 = false;
             return temp;
         }
         
@@ -347,7 +347,7 @@ class NRU: public Pager{
     NRU();
 };
 NRU::NRU(){
-    index = 0;
+    index = -1;
     index_1 = 0; 
     index_2 = 0;
     index_3 = 0;
