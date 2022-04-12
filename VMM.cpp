@@ -11,6 +11,7 @@
 #include <queue>
 #include <unistd.h>
 #include <list>
+#include <limits>
 // #include <tuple>
 
 using namespace std;
@@ -84,12 +85,14 @@ class Frame{
     int frame_index;
     unsigned long virtual_address:32;
     unsigned long mapped:1;
+    unsigned int age;
     Process *p;
     Frame();
 };
 Frame::Frame(){
     virtual_address = 0;
     mapped = 0;
+    age = 0;
     p = nullptr;
 }
 Frame frame_table[MAX_FRAMES];
@@ -165,7 +168,9 @@ void unmap_exit(PTE *pte, Process *ptr, int vpage){
 }
 class Pager {
     public:
-    virtual Frame* select_victim_frame() = 0; // virtual base class
+    virtual Frame* select_victim_frame() = 0; 
+    virtual void reset_age(Frame *frame){}
+
 };
 class FIFO: public Pager{
     Frame  *select_victim_frame(){
@@ -245,7 +250,7 @@ class NRU: public Pager{
             // flag = index;
             vpage = frame_table[i].virtual_address;
             if (!frame_table[i].p->page_table[vpage].referenced && !frame_table[i].p->page_table[vpage].modified){
-                cout << "flag_class0" << endl;
+                // cout << "flag_class0" << endl;
                 frame_table[i].p->unmaps++;
                 PTE *pte = &frame_table[i].p->page_table[vpage];
                 unmap(pte, frame_table[i].p, vpage);
@@ -258,7 +263,7 @@ class NRU: public Pager{
                 
                 if (!flag_class1){
                     // cout << "i " << i << endl;
-                    cout << "flag_class1" << endl;
+                    // cout << "flag_class1" << endl;
                     frame_class1 = &frame_table[i];
                     index_1 = i ;
                     flag_class1 = true;
@@ -310,7 +315,7 @@ class NRU: public Pager{
             return temp;
         }
         else if (frame_class2 != nullptr){
-            cout << "class2" << endl;
+            // cout << "class2" << endl;
             // cout << "index_2 " << index_2 << endl;
             temp = frame_class2;
             frame_class2 = nullptr;
@@ -358,6 +363,66 @@ NRU::NRU(){
     bool flag_class2 = false;
     bool flag_class3 = false;
 }
+class Aging: public Pager{
+    public:
+    Frame *select_victim_frame(){
+       set_age();
+       Frame *frame;
+       unsigned int lowest_bit = numeric_limits<unsigned int>::max();
+    //    cout << "lowest_bit " << lowest_bit << endl;
+       if (hand >= sizeof(frame_table)/sizeof(*frame_table) - 1){
+            hand = -1;
+        }
+       hand++;
+       int flag =  hand;
+       int index= 0;
+
+       while(true){
+            // cout << "hand " << hand << endl;
+            // cout << "age " << frame_table[hand].age << endl;
+            if (frame_table[hand].age < lowest_bit){
+                // cout << "here " << endl;
+               lowest_bit = frame_table[hand].age;
+               frame = &frame_table[hand];
+               index = hand;
+            }
+            hand++;
+            if (hand > sizeof(frame_table)/sizeof(*frame_table) - 1){
+                // cout << "here" << endl;
+                hand = 0;
+            }
+            if ( hand == flag ){
+                // cout << "this " << endl;
+                break;
+            }
+           
+        }
+        hand = index;
+        frame->p->unmaps++;
+        PTE *pte = &frame->p->page_table[frame->virtual_address];
+        unmap(pte, frame->p, frame->virtual_address);
+        frame->p = nullptr;
+        frame->virtual_address = 0;
+        frame->age = 0;
+        return frame;
+        
+
+    }
+    void set_age(){
+        for (int i = 0; i < sizeof(frame_table)/sizeof(*frame_table); i++){
+            frame_table[i].age = frame_table[i].age >> 1;
+            if (frame_table[i].p->page_table[frame_table[i].virtual_address].referenced){
+                
+                frame_table[i].age = (frame_table[i].age | 0x80000000 );
+                frame_table[i].p->page_table[frame_table[i].virtual_address].referenced = 0;
+                // cout << "frame_table " << i << " " <<  "age " << frame_table[i].age << endl;
+            }
+        }
+    }
+    void reset_age(Frame *frame){
+        frame->age = 0;
+    }
+};
 
 void set_accessed_bit(Process *ptr, int vpage){
     for (int j = 0; j < ptr->vma.size(); j++){
@@ -656,6 +721,7 @@ int main(int argc, char** argv){
             cost += 300;
             current_process->maps++;
             pte ->mapped = 1;
+            the_Pager->reset_age(frame);
             // else if (pte -> mapped){
             //     cout << 
             // }
