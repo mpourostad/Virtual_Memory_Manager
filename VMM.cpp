@@ -86,6 +86,7 @@ class Frame{
     unsigned long virtual_address:32;
     unsigned long mapped:1;
     unsigned int age;
+    unsigned long current_time;
     Process *p;
     Frame();
 };
@@ -93,6 +94,7 @@ Frame::Frame(){
     virtual_address = 0;
     mapped = 0;
     age = 0;
+    current_time = 0;
     p = nullptr;
 }
 Frame frame_table[MAX_FRAMES];
@@ -423,6 +425,62 @@ class Aging: public Pager{
         frame->age = 0;
     }
 };
+class Working_set: public Pager{
+    Frame *select_victim_frame(){
+        if (hand >= sizeof(frame_table)/sizeof(*frame_table) - 1){
+            hand = -1;
+        }
+       hand++;
+       int flag =  hand;
+       int index= 0;
+       Frame *frame = &frame_table[hand];
+       unsigned int oldest = numeric_limits<unsigned int>::max();
+       for (int i = 0; i < sizeof(frame_table)/ sizeof(*frame_table); i++){
+           if (frame_table[i].p->page_table[frame_table[i].virtual_address].referenced){
+               frame_table[i].p->page_table[frame_table[i].virtual_address].referenced = 0;
+               frame_table[i].current_time = count_inst;
+
+           }
+       }
+    //    cout << "hand " << hand<< endl;
+       while(true){
+        //    cout << "hand " << hand<< endl;
+        //    if (frame_table[hand].p->page_table[frame_table[hand].virtual_address].referenced){
+        //        frame_table[hand].p->page_table[frame_table[hand].virtual_address].referenced = 0;
+        //        frame_table[hand].current_time = count_inst;
+
+        //    }
+           if (count_inst - frame_table[hand].current_time > 50){
+            //    cout << "instruction more than 50" << endl;
+               frame = &frame_table[hand];
+               break;
+           }
+           else {
+               if (frame_table[hand].current_time < oldest){
+                   frame = &frame_table[hand];
+                   oldest = frame_table[hand].current_time;
+                //    cout << "I'm the oldest" << endl;
+               }
+           }
+           hand++;
+            if (hand >= sizeof(frame_table)/sizeof(*frame_table)){
+                hand = 0;
+            }
+            if (hand == flag){
+                break;
+            }
+       }
+       hand = frame->frame_index;
+       frame->p->unmaps++;
+       PTE *pte = &frame->p->page_table[frame->virtual_address];
+       unmap(pte, frame->p, frame->virtual_address);
+       frame->p = nullptr;
+       frame->virtual_address = 0;
+       frame->current_time = count_inst;
+       return frame;
+
+    }
+};
 
 void set_accessed_bit(Process *ptr, int vpage){
     for (int j = 0; j < ptr->vma.size(); j++){
@@ -637,7 +695,7 @@ int main(int argc, char** argv){
         frame_table[i].frame_index = i;
         free_list.push(&frame_table[i]);
     }
-    Pager *the_Pager = new NRU;
+    Pager *the_Pager = new Working_set;
     // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ simulation
     Process *current_process;
     // cost += instruction_char.size() - 1;
