@@ -22,6 +22,9 @@ int hand;
 unsigned long ctx_switches, process_exits;
 unsigned long long cost;
 int count_inst;
+vector <string> randvals;
+int ofs;
+
 
 
 
@@ -72,12 +75,28 @@ class Process{
     // vector <vector <int> > vma;
     vector <VMA*> vma;
     PTE page_table[MAX_VPAGES];
-    unsigned long segv, segprot, maps, unmaps, ins, outs, zeros, fins, fouts;
+    unsigned long segv;
+    unsigned long segprot;
+    unsigned long maps;
+    unsigned long unmaps;
+    unsigned long ins;
+    unsigned long outs;
+    unsigned long zeros;
+    unsigned long fins;
+    unsigned long fouts;
     Process(int);
 };
 Process::Process(int id){
     pid = id;
-    // segv, segprot, maps, unmaps, ins, outs, zeros, fins, fouts = 0, 0, 0, 0, 0, 0, 0, 0, 0;
+    segv = 0;
+    segprot = 0;
+    maps = 0;
+    unmaps = 0;
+    ins = 0;
+    outs = 0;
+    zeros = 0;
+    fins = 0;
+    fouts = 0;
 
 }
 class Frame{
@@ -481,7 +500,27 @@ class Working_set: public Pager{
 
     }
 };
-
+int myrandom() {
+    if (ofs >= stoi(randvals[0]) ){
+        ofs = 0;
+    }
+    ofs++;
+    return (stoi(randvals[ofs]) % (sizeof(frame_table)/sizeof(*frame_table))); 
+    
+}
+class Random: public Pager{
+    Frame *select_victim_frame(){
+        int index = myrandom();
+        Frame *frame = &frame_table[index];
+        frame->p->unmaps++;
+        PTE *pte = &frame->p->page_table[frame->virtual_address];
+        unmap(pte, frame->p, frame->virtual_address);
+        frame->p = nullptr;
+        frame->virtual_address = 0;
+        // frame->current_time = count_inst;
+        return frame;
+    }
+};
 void set_accessed_bit(Process *ptr, int vpage){
     for (int j = 0; j < ptr->vma.size(); j++){
         if (vpage >= ptr->vma[j]->start_page && vpage <= ptr->vma[j]->end_page ){
@@ -596,6 +635,15 @@ void set_write_protected_bit(Process *ptr, unsigned int vpage){
 int main(int argc, char** argv){
     // MAX_FRAMES = 16;
     // cout << sizeof(frame_table) / sizeof(*frame_table) - 1;
+    string filename_rand = argv[2]; 
+    ifstream r;
+    r.open(filename_rand);
+    copy(istream_iterator<string>(r),
+    istream_iterator<string>(),
+    back_inserter(randvals));
+
+    r.close();
+    // cout << randvals.size() << endl;
     hand = -1;
     count_inst = 0; 
     vector <char> instruction_char;
@@ -610,6 +658,7 @@ int main(int argc, char** argv){
     int flag = 0;
     int num_p = -1;
     int num_vma = -1;
+    ofs = 0;
 
     while (getline(file, str))
     {
@@ -695,7 +744,7 @@ int main(int argc, char** argv){
         frame_table[i].frame_index = i;
         free_list.push(&frame_table[i]);
     }
-    Pager *the_Pager = new Working_set;
+    Pager *the_Pager = new Random;
     // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ simulation
     Process *current_process;
     // cost += instruction_char.size() - 1;
