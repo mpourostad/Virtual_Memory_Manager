@@ -253,7 +253,7 @@ class NRU: public Pager{
     bool flag_class2;
     bool flag_class3;
     Frame *select_victim_frame(){
-        if (count_inst >= 50){
+        if (count_inst >= 49){
             daemon();
             count_inst = 0;
         }
@@ -367,7 +367,7 @@ class NRU: public Pager{
         
     }
     void daemon(){
-        for (int i =   0; i < frame_size; i++){
+        for (int i = 0; i < frame_size; i++){
             frame_table[i].p->page_table[frame_table[i].virtual_address].referenced = 0;
         }
     }
@@ -381,9 +381,9 @@ NRU::NRU(){
     frame_class1 = nullptr;
     frame_class2 = nullptr;
     frame_class3 = nullptr;
-    bool flag_class1 = false;
-    bool flag_class2 = false;
-    bool flag_class3 = false;
+    flag_class1 = false;
+    flag_class2 = false;
+    flag_class3 = false;
 }
 class Aging: public Pager{
     public:
@@ -758,7 +758,7 @@ int main(int argc, char** argv){
     // string frame_num(frame_size);
     // int frame_numbers = stoi(frame_num);
     cout << frame_size << endl;
-    Pager *the_Pager = new Random;
+    Pager *the_Pager = new Clock;
     // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ simulation
     Process *current_process;
     // cost += instruction_char.size() - 1;
