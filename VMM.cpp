@@ -195,9 +195,6 @@ void unmap_exit(PTE *pte, Process *ptr, int vpage){
         }
         
     }
-    // else{
-    //     pte ->paged_out = 0;
-    // }
     pte ->paged_out = 0;
     pte->modified = 0;
     pte -> referenced = 0;
@@ -257,151 +254,95 @@ class Clock:public Pager{
 
     }
 };
+
 class NRU: public Pager{
-    public:
-    int index;
-    int index_1;
-    int index_2;
-    int index_3;
-    Frame *frame_class1;
-    Frame *frame_class2;
-    Frame *frame_class3;
-    bool flag_class1;
-    bool flag_class2;
-    bool flag_class3;
     Frame *select_victim_frame(){
-        if (count_inst >= 49){
-            daemon();
+        // bool class0;
+        bool class1;
+        bool class2;
+        bool class3;
+        Frame *frame_class0 = nullptr;
+        Frame *frame_class1 = nullptr;
+        Frame *frame_class2 = nullptr;
+        Frame *frame_class3 = nullptr;
+        Frame *victim;
+        if (hand >= frame_size - 1){
+            hand = -1;
+        }
+        hand++;
+        bool reset = false;
+        if (count_inst >= 50){
             count_inst = 0;
+            daemon();
         }
-        int vpage;
-        
-        if (index >= frame_size - 1){
-            index = -1;
-        }
-        flag_class1 = false;
-        flag_class2 = false;
-        flag_class3 = false;
-        int i = index + 1;
-        // int flag = index;
-        while (true){
-            // cout << "i " << i << endl;
-            // flag = index;
-            vpage = frame_table[i].virtual_address;
-            if (!frame_table[i].p->page_table[vpage].referenced && !frame_table[i].p->page_table[vpage].modified){
-                // cout << "flag_class0" << endl;
-                frame_table[i].p->unmaps++;
-                PTE *pte = &frame_table[i].p->page_table[vpage];
-                unmap(pte, frame_table[i].p, vpage);
-                frame_table[i].p = nullptr;
-                frame_table[i].virtual_address = 0;
-                index = i;
-                return &frame_table[i];
-            }
-            else if (!frame_table[i].p->page_table[vpage].referenced && frame_table[i].p->page_table[vpage].modified){
-                
-                if (!flag_class1){
-                    // cout << "i " << i << endl;
-                    // cout << "flag_class1" << endl;
-                    frame_class1 = &frame_table[i];
-                    index_1 = i ;
-                    flag_class1 = true;
-                }
-            }
-            else if (frame_table[i].p->page_table[vpage].referenced && !frame_table[i].p->page_table[vpage].modified){
-               
-                if (!flag_class2){
-                    frame_class2 = &frame_table[i];
-                    // cout << "here" << endl;
-                    index_2 = i ;
-                    flag_class2 = true;
-                }
-            }
-            else{
-                if (!flag_class3){
-                    index_3 = i;
-                    frame_class3 = &frame_table[i];
-                    flag_class3 = true;
-                }
-            }
-            
-            // cout << "i " <<  i << endl;
-            i++;
-            if (i > frame_size - 1){
-                // cout << "here" << endl;
-                i = 0;
-            }
-            if (i - 1 == index ){
+        int flag = hand;
+        while(true){
+            int ref_bit = frame_table[hand].p->page_table[frame_table[hand].virtual_address].referenced;
+            int mod_bit = frame_table[hand].p->page_table[frame_table[hand].virtual_address].modified;
+            if (2 * ref_bit + mod_bit ==  0){
+                frame_class0 = &frame_table[hand];
                 break;
             }
-           
-            
+            if (2 * ref_bit + mod_bit ==  1){
+                if (!class1){
+                    frame_class1 = &frame_table[hand];
+                    class1 = true;
+                }
+                
+            }
+            if (2 * ref_bit + mod_bit ==  2){
+                if (!class2){
+                    frame_class2 = &frame_table[hand];
+                    class2 = true;
+                }
+                
+            }
+            if (2 * ref_bit + mod_bit ==  3){
+                if (!class3){
+                    frame_class3 = &frame_table[hand];
+                    class3 = true;
+                }
+                
+            }
+            hand++;
+            if (hand >= frame_size){
+                hand = 0;
+            }
+            if (hand == flag){
+                break;
+            }
         }
-        Frame *temp;
-        if (frame_class1 != nullptr){
-            // cout << "class1" << endl;
-            index = index_1;
-            temp = frame_class1;
-            frame_class1 = nullptr;
-            vpage = temp->virtual_address;
-            // cout << "vpage " << vpage << endl;
-            temp->p->unmaps++;
-            PTE *pte = &temp->p->page_table[vpage];
-            unmap(pte, temp->p, vpage);
-            temp->p = nullptr;
-            temp->virtual_address = 0;
-            // flag_class1 = false;
-            return temp;
+        if (frame_class0 != nullptr){
+            victim = frame_class0;
+        }
+        else if (frame_class1 != nullptr){
+            victim = frame_class1;
         }
         else if (frame_class2 != nullptr){
-            // cout << "class2" << endl;
-            // cout << "index_2 " << index_2 << endl;
-            temp = frame_class2;
-            frame_class2 = nullptr;
-            index = index_2;
-            vpage = temp->virtual_address;
-            temp->p->unmaps++;
-            PTE *pte = &temp->p->page_table[vpage];
-            unmap(pte, temp->p, vpage);
-            temp->p = nullptr;
-            temp->virtual_address = 0;
-            // flag_class2 = false;
-            return temp;
+            victim = frame_class2;
+        }
+        else if(frame_class3 != nullptr){
+            victim = frame_class3;
         }
         else{
-            temp = frame_class3;
-            frame_class3 = nullptr;
-            index = index_3;
-            vpage = temp->virtual_address;
-            temp->p->unmaps++;
-            PTE *pte = &temp->p->page_table[vpage];
-            unmap(pte, temp->p, vpage);
-            temp->p = nullptr;
-            temp->virtual_address = 0;
-            // flag_class3 = false;
-            return temp;
+            cout << "I'm screwed" << endl;
         }
-        
+        victim->p->unmaps++;
+        PTE *pte = &victim->p->page_table[victim->virtual_address];
+        unmap(pte, victim->p, victim->virtual_address);
+        victim->p = nullptr;
+        victim->virtual_address = 0;
+        hand = victim->frame_index;
+        return victim;
+
+
     }
     void daemon(){
         for (int i = 0; i < frame_size; i++){
             frame_table[i].p->page_table[frame_table[i].virtual_address].referenced = 0;
         }
     }
-    NRU();
 };
-NRU::NRU(){
-    index = -1;
-    index_1 = 0; 
-    index_2 = 0;
-    index_3 = 0;
-    frame_class1 = nullptr;
-    frame_class2 = nullptr;
-    frame_class3 = nullptr;
-    flag_class1 = false;
-    flag_class2 = false;
-    flag_class3 = false;
-}
 class Aging: public Pager{
     public:
     Frame *select_victim_frame(){
@@ -644,25 +585,9 @@ void set_write_protected_bit(Process *ptr, unsigned int vpage){
     // return false;
 
 }
-// void load_free_pool(){
-//     for (int i = 0; i < sizeof(frame_table)/sizeof(*frame_table); i++){
-//         free_list.push(&frame_table[i]);
-//     }
-// }
 
 int main(int argc, char** argv){
-    // MAX_FRAMES = 16;
-    // cout << sizeof(frame_table) / sizeof(*frame_table) - 1;
     Pager *the_Pager;
-    // string filename_rand = argv[5]; 
-    // ifstream r;
-    // r.open(filename_rand);
-    // copy(istream_iterator<string>(r),
-    // istream_iterator<string>(),
-    // back_inserter(randvals));
-
-    // r.close();
-    // cout << randvals.size() << endl;
     hand = -1;
     count_inst = 0; 
     vector <char> instruction_char;
@@ -868,6 +793,7 @@ int main(int argc, char** argv){
         }
         else if (instruction_char[i] == 'e'){
             cost += 1250;
+            // count_inst = 0;
             process_exits++;
             if (ohno){
                 printf("EXIT current process %d\n", current_process->pid);
@@ -876,11 +802,11 @@ int main(int argc, char** argv){
             for (int j = 0; j < sizeof(current_process->page_table) / sizeof(*current_process->page_table); j++){
                 if (current_process->page_table[j].mapped){
                     free_list.push(&frame_table[current_process->page_table[j].physical_frame]); 
-                    
                     frame_table[current_process->page_table[j].physical_frame].p = nullptr;
                     frame_table[current_process->page_table[j].physical_frame].virtual_address = 0;
                     unmap_exit(&current_process->page_table[j], current_process, j);
                     current_process->unmaps++;
+                    
                     
                 }
                 else{
