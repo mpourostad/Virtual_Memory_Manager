@@ -25,6 +25,7 @@ unsigned long long cost;
 int count_inst;
 vector <string> randvals;
 int ofs;
+bool ohno;
 
 
 
@@ -144,16 +145,25 @@ void unmap(PTE *pte, Process *ptr, int vpage){
     //     }
     // }
     cost += 400;
-    printf(" UNMAP %d:%d\n", ptr->pid, vpage);
+    if (ohno){
+        printf(" UNMAP %d:%d\n", ptr->pid, vpage);
+    }
+    
     if (pte->modified){
         pte->paged_out = 1;
         if (pte -> file_mapped){
-            cout << " FOUT" << endl;
+            if (ohno){
+                 cout << " FOUT" << endl;
+            }
+           
             cost += 2400;
             ptr->fouts++;
         }
         else{
-            cout<< " OUT" << endl;
+            if (ohno){
+                cout<< " OUT" << endl;
+            }
+            
             cost += 2700;
             ptr->outs++;
             
@@ -168,11 +178,17 @@ void unmap(PTE *pte, Process *ptr, int vpage){
 }
 void unmap_exit(PTE *pte, Process *ptr, int vpage){
     cost += 400;
-    printf(" UNMAP %d:%d\n", ptr->pid, vpage);
+    if (ohno){
+        printf(" UNMAP %d:%d\n", ptr->pid, vpage);
+    }
+    
     if (pte->modified){
         // pte->paged_out = 1;
         if (pte -> file_mapped){
-            cout << " FOUT" << endl;
+            if (ohno){
+                cout << " FOUT" << endl;
+            }
+            
             cost += 2400;
             ptr->fouts++;
         }
@@ -636,20 +652,21 @@ void set_write_protected_bit(Process *ptr, unsigned int vpage){
 int main(int argc, char** argv){
     // MAX_FRAMES = 16;
     // cout << sizeof(frame_table) / sizeof(*frame_table) - 1;
-    string filename_rand = argv[3]; 
-    ifstream r;
-    r.open(filename_rand);
-    copy(istream_iterator<string>(r),
-    istream_iterator<string>(),
-    back_inserter(randvals));
+    Pager *the_Pager;
+    // string filename_rand = argv[5]; 
+    // ifstream r;
+    // r.open(filename_rand);
+    // copy(istream_iterator<string>(r),
+    // istream_iterator<string>(),
+    // back_inserter(randvals));
 
-    r.close();
+    // r.close();
     // cout << randvals.size() << endl;
     hand = -1;
     count_inst = 0; 
     vector <char> instruction_char;
     vector <int> instruction_int;
-    ifstream file(argv[2]);
+    // ifstream file(argv[4]);
     string str;
     // vector < vector < int > > total_vma;
     vector <VMA*> total_vma;
@@ -667,27 +684,92 @@ int main(int argc, char** argv){
     bool print_PageTable = false;
     bool print_FrameTable = false;
     bool stats = false;
+    ohno = false;
     char *get_pager = NULL;
-    char *verbose = NULL;
-    while ((c = getopt (argc, argv, "f:ao")) != -1)
+    char* verbose = NULL;
+    // string options = NULL;
+    while ((c = getopt (argc, argv, "f:a:o:")) != -1)
     
     switch (c)
       {
       case 'f':
-        // cout << "this" << endl;
         frame_size = stoi(optarg);
         break;
       case 'a':
         get_pager = optarg;
+        if (get_pager[0] == 'c'){
+        the_Pager = new Clock;
+        }
+        else if (get_pager[0] == 'f'){
+            the_Pager = new FIFO;
+        }
+        else if (get_pager[0] == 'a'){
+            the_Pager = new Aging;
+        }
+        else if (get_pager[0] == 'w'){
+            the_Pager = new Working_set;
+        }
+        else if (get_pager[0] == 'e'){
+            the_Pager = new NRU;
+        }
+        else if (get_pager[0] == 'r'){
+            the_Pager = new Random;
+        }
+        else{
+            cout<< "the algorithm didn't get recognized" << endl;
+        }
+        
         break;
       case 'o':
         verbose = optarg;
+        
         break;
       default:
         abort ();
     }
-
-    while (getline(file, str))
+    string options = string(verbose);
+    // cout << options << endl;
+    if  (options.find('S') != string::npos){
+        stats = true;
+    }
+    if (options.find('F') != string::npos){
+        print_FrameTable = true;
+    }
+    if (options.find('P') != string::npos){
+        print_PageTable = true;
+    }
+    if (options.find('O') != string::npos){
+        ohno = true;
+    }
+    string filename_input;
+    string filename_rand;
+    // int index = 0;
+    for (int i = optind; i < argc; i++){
+        string arg(argv[i]);
+        if (arg.find("rfile") != string::npos){
+            filename_rand = arg;
+            
+            // ifstream file(argv[i]);
+        }
+        else {
+            filename_input = arg;
+            // index = i;
+            // cout << "filename_input " << filename_input << endl;
+        }
+    }
+    // string filename_rand = argv[5]; 
+    
+    ifstream r;
+    r.open(filename_rand);
+    copy(istream_iterator<string>(r),
+    istream_iterator<string>(),
+    back_inserter(randvals));
+    r.close();
+    
+    ifstream f;
+    // in.open(filename_input);
+    f.open(filename_input);
+    while (getline(f, str))
     {
         // cout << "this " << endl;
         int n = str.length();
@@ -750,6 +832,7 @@ int main(int argc, char** argv){
         } 
 
     }
+    f.close();
     for (int i = 0; i < frame_size; i++){
         frame_table[i].frame_index = i;
         free_list.push(&frame_table[i]);
@@ -757,14 +840,20 @@ int main(int argc, char** argv){
     
     // string frame_num(frame_size);
     // int frame_numbers = stoi(frame_num);
-    cout << frame_size << endl;
-    Pager *the_Pager = new Clock;
+    // cout << frame_size << endl;
+    // cout << "instruction_char_size " << instruction_char.size() << endl;
+
+   
+    
     // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ simulation
     Process *current_process;
     // cost += instruction_char.size() - 1;
     for (int i = 0; i < instruction_char.size(); i++){
         count_inst++;
-        printf("%d: ==> %c %d \n", i, instruction_char[i], instruction_int[i]);
+        if (ohno){
+            printf("%d: ==> %c %d \n", i, instruction_char[i], instruction_int[i]);
+        }
+        
         if (instruction_char[i] == 'c'){
             ctx_switches++;
             cost+= 130;
@@ -804,7 +893,10 @@ int main(int argc, char** argv){
         }
         if (!pte->accessed){
             cost += 340;
-            cout<< " SEGV" <<endl;
+            if (ohno){
+                cout<< " SEGV" <<endl;
+            }
+            
             current_process->segv++;
             cost++;
             continue;
@@ -821,24 +913,36 @@ int main(int argc, char** argv){
             frame->p = current_process;
             frame->virtual_address = instruction_int[i];
             if((! pte->paged_out) && (! pte->file_mapped)){
-                cout << " ZERO"<< endl;
+                if (ohno){
+                    cout << " ZERO"<< endl;
+                }
+                
                 cost += 140;
                 current_process->zeros++;
                 
             }
             else if (pte ->paged_out && !pte ->file_mapped){
-                cout << " IN" << endl;
+                if (ohno){
+                    cout << " IN" << endl;
+                }
+                
                 cost += 3100;
 
                 current_process->ins++;
             }
             else if (pte ->file_mapped){
-                cout << " FIN" << endl;
+                if (ohno){
+                    cout << " FIN" << endl;
+                }
+                
                 cost += 2800;
                 current_process->fins++;
             }
             // page_fault(current_process, pte, the_Pager, instruction_int[i]);
-            cout << " MAP " << frame->frame_index << endl;
+            if (ohno){
+                cout << " MAP " << frame->frame_index << endl;
+            }
+            
             cost += 300;
             current_process->maps++;
             pte ->mapped = 1;
@@ -859,7 +963,10 @@ int main(int argc, char** argv){
         else if (instruction_char[i] == 'w' && pte ->write_protect){
             pte -> referenced = 1;
             current_process -> segprot++;
-            cout << " SEGPROT" << endl;
+            if (ohno){
+                cout << " SEGPROT" << endl;
+            }
+            
             cost ++;
             cost += 420;
             
@@ -867,11 +974,20 @@ int main(int argc, char** argv){
 
         
     }
-    print_page_t(process_ptr);
-    print_frame_t();
-    print_stats(process_ptr);
-    printf("TOTALCOST %lu %lu %lu %llu %lu\n",
-              instruction_char.size(), ctx_switches, process_exits, cost, sizeof(process_ptr[0]->page_table) /MAX_VPAGES);
+    if (print_PageTable){
+        print_page_t(process_ptr);
+    }
+    if (print_FrameTable){
+        print_frame_t();
+    }
+    if(stats){
+         print_stats(process_ptr);
+         printf("TOTALCOST %lu %lu %lu %llu %lu\n",
+                instruction_char.size(), ctx_switches, process_exits, cost, sizeof(process_ptr[0]->page_table) /MAX_VPAGES);
+    }
+    
+    
+   
     // while (get_next_instruction(&operation, &vpage)) {
     // // handle special case of “c” and “e” instruction // now the real instructions for read and write pte_t *pte = &current_process->page_table[vpage]; if ( ! pte->present) {
     // // this in reality generates the page fault exception and now you execute
