@@ -16,8 +16,9 @@
 
 using namespace std;
 
-const int MAX_FRAMES = 16;
+const int MAX_FRAMES = 128;
 const int MAX_VPAGES = 64;
+int frame_size;
 int hand;
 unsigned long ctx_switches, process_exits;
 unsigned long long cost;
@@ -196,7 +197,7 @@ class Pager {
 class FIFO: public Pager{
     Frame  *select_victim_frame(){
         
-        if (hand >= sizeof(frame_table) / sizeof(*frame_table) - 1){
+        if (hand >= frame_size - 1){
             hand = -1;
         }
         
@@ -214,7 +215,7 @@ class FIFO: public Pager{
 };
 class Clock:public Pager{
     Frame *select_victim_frame(){
-        if (hand >= sizeof(frame_table) / sizeof(*frame_table) - 1){
+        if (hand >= frame_size - 1){
             // cout << "this" << endl;
             hand = -1;
         }
@@ -226,7 +227,7 @@ class Clock:public Pager{
             
             frame_table[hand].p->page_table[frame_table[hand].virtual_address].referenced = 0;
             hand++;
-            if (hand > sizeof(frame_table) / sizeof(*frame_table) - 1){
+            if (hand > frame_size - 1){
                 hand = 0;
             }
         }
@@ -258,7 +259,7 @@ class NRU: public Pager{
         }
         int vpage;
         
-        if (index >= sizeof(frame_table)/sizeof(*frame_table) - 1){
+        if (index >= frame_size - 1){
             index = -1;
         }
         flag_class1 = false;
@@ -309,7 +310,7 @@ class NRU: public Pager{
             
             // cout << "i " <<  i << endl;
             i++;
-            if (i > sizeof(frame_table)/sizeof(*frame_table) - 1){
+            if (i > frame_size - 1){
                 // cout << "here" << endl;
                 i = 0;
             }
@@ -366,7 +367,7 @@ class NRU: public Pager{
         
     }
     void daemon(){
-        for (int i =   0; i < sizeof(frame_table)/sizeof(*frame_table); i++){
+        for (int i =   0; i < frame_size; i++){
             frame_table[i].p->page_table[frame_table[i].virtual_address].referenced = 0;
         }
     }
@@ -391,7 +392,7 @@ class Aging: public Pager{
        Frame *frame;
        unsigned int lowest_bit = numeric_limits<unsigned int>::max();
     //    cout << "lowest_bit " << lowest_bit << endl;
-       if (hand >= sizeof(frame_table)/sizeof(*frame_table) - 1){
+       if (hand >= frame_size - 1){
             hand = -1;
         }
        hand++;
@@ -408,7 +409,7 @@ class Aging: public Pager{
                index = hand;
             }
             hand++;
-            if (hand > sizeof(frame_table)/sizeof(*frame_table) - 1){
+            if (hand > frame_size - 1){
                 // cout << "here" << endl;
                 hand = 0;
             }
@@ -430,7 +431,7 @@ class Aging: public Pager{
 
     }
     void set_age(){
-        for (int i = 0; i < sizeof(frame_table)/sizeof(*frame_table); i++){
+        for (int i = 0; i < frame_size; i++){
             frame_table[i].age = frame_table[i].age >> 1;
             if (frame_table[i].p->page_table[frame_table[i].virtual_address].referenced){
                 
@@ -446,7 +447,7 @@ class Aging: public Pager{
 };
 class Working_set: public Pager{
     Frame *select_victim_frame(){
-        if (hand >= sizeof(frame_table)/sizeof(*frame_table) - 1){
+        if (hand >= frame_size - 1){
             hand = -1;
         }
        hand++;
@@ -454,7 +455,7 @@ class Working_set: public Pager{
        int index= 0;
        Frame *frame = &frame_table[hand];
        unsigned int oldest = numeric_limits<unsigned int>::max();
-       for (int i = 0; i < sizeof(frame_table)/ sizeof(*frame_table); i++){
+       for (int i = 0; i < frame_size; i++){
            if (frame_table[i].p->page_table[frame_table[i].virtual_address].referenced){
                frame_table[i].p->page_table[frame_table[i].virtual_address].referenced = 0;
                frame_table[i].current_time = count_inst;
@@ -482,7 +483,7 @@ class Working_set: public Pager{
                }
            }
            hand++;
-            if (hand >= sizeof(frame_table)/sizeof(*frame_table)){
+            if (hand >= frame_size){
                 hand = 0;
             }
             if (hand == flag){
@@ -505,7 +506,7 @@ int myrandom() {
         ofs = 0;
     }
     ofs++;
-    return (stoi(randvals[ofs]) % (sizeof(frame_table)/sizeof(*frame_table))); 
+    return stoi(randvals[ofs]) % frame_size; 
     
 }
 class Random: public Pager{
@@ -542,7 +543,7 @@ void print_stats(vector <Process*> proc){
 }
 void print_frame_t(){
     cout << "FT: " ;
-    for (int i = 0; i < sizeof(frame_table)/sizeof(*frame_table); i++){
+    for (int i = 0; i < frame_size; i++){
         if (frame_table[i].p == nullptr){
             cout << "* ";
         }
@@ -635,7 +636,7 @@ void set_write_protected_bit(Process *ptr, unsigned int vpage){
 int main(int argc, char** argv){
     // MAX_FRAMES = 16;
     // cout << sizeof(frame_table) / sizeof(*frame_table) - 1;
-    string filename_rand = argv[2]; 
+    string filename_rand = argv[3]; 
     ifstream r;
     r.open(filename_rand);
     copy(istream_iterator<string>(r),
@@ -648,7 +649,7 @@ int main(int argc, char** argv){
     count_inst = 0; 
     vector <char> instruction_char;
     vector <int> instruction_int;
-    ifstream file(argv[1]);
+    ifstream file(argv[2]);
     string str;
     // vector < vector < int > > total_vma;
     vector <VMA*> total_vma;
@@ -659,6 +660,32 @@ int main(int argc, char** argv){
     int num_p = -1;
     int num_vma = -1;
     ofs = 0;
+    // getting option args:
+    int c;
+    string o;
+    // int frame_size;
+    bool print_PageTable = false;
+    bool print_FrameTable = false;
+    bool stats = false;
+    char *get_pager = NULL;
+    char *verbose = NULL;
+    while ((c = getopt (argc, argv, "f:ao")) != -1)
+    
+    switch (c)
+      {
+      case 'f':
+        // cout << "this" << endl;
+        frame_size = stoi(optarg);
+        break;
+      case 'a':
+        get_pager = optarg;
+        break;
+      case 'o':
+        verbose = optarg;
+        break;
+      default:
+        abort ();
+    }
 
     while (getline(file, str))
     {
@@ -717,33 +744,20 @@ int main(int argc, char** argv){
                 pcb->vma.push_back(total_vma[i]);
             }
             process_ptr.push_back(pcb);
-            // cout << pcb -> pid << endl;
-            // for (int i = start; i < end; i ++){
-            //     PTE p = new PTE();
-            //     pcb->page_table.[i] = *p;
-                
-            // }
             process_number++;
             total_vma.clear();
             
         } 
 
     }
-    // for (int i = 0; i < process_ptr.size(); i++){
-    //     cout<< "pid: " <<process_ptr[i] -> pid << endl;
-    //     for (int j = 0; j < process_ptr[i] -> vma.size(); j++){
-    //         for (int k = 0; k < process_ptr[i] -> vma[j].size(); k++){
-    //             cout << process_ptr[i] -> vma[j][k] << " ";
-    //             // cout << "is mapped: " << process_ptr[i] -> page_table->mapped << endl;
-    //         }
-    //         cout<< endl;
-    //     }
-    // }
-    cout << endl;
-    for (int i = 0; i < sizeof(frame_table)/sizeof(*frame_table); i++){
+    for (int i = 0; i < frame_size; i++){
         frame_table[i].frame_index = i;
         free_list.push(&frame_table[i]);
     }
+    
+    // string frame_num(frame_size);
+    // int frame_numbers = stoi(frame_num);
+    cout << frame_size << endl;
     Pager *the_Pager = new Random;
     // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ simulation
     Process *current_process;
