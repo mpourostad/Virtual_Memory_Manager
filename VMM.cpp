@@ -150,7 +150,7 @@ void unmap(PTE *pte, Process *ptr, int vpage){
     }
     
     if (pte->modified){
-        pte->paged_out = 1;
+        // pte->paged_out = 1;
         if (pte -> file_mapped){
             if (ohno){
                  cout << " FOUT" << endl;
@@ -160,6 +160,7 @@ void unmap(PTE *pte, Process *ptr, int vpage){
             ptr->fouts++;
         }
         else{
+            pte->paged_out = 1;
             if (ohno){
                 cout<< " OUT" << endl;
             }
@@ -558,13 +559,13 @@ void print_stats(vector <Process*> proc){
     
 }
 void print_frame_t(){
-    cout << "FT: " ;
+    cout << "FT:" ;
     for (int i = 0; i < frame_size; i++){
         if (frame_table[i].p == nullptr){
-            cout << "* ";
+            cout << " *";
         }
         else{
-            printf("%d:%d ", frame_table[i].p->pid, frame_table[i].virtual_address);
+            printf(" %d:%d", frame_table[i].p->pid, frame_table[i].virtual_address);
         }
         
     }
@@ -572,18 +573,18 @@ void print_frame_t(){
 }
 void print_page_t(vector<Process*> process_ptr){
     for (int i = 0; i < process_ptr.size();  i++){
-        printf("PT[%d]: ", i);
+        printf("PT[%d]:", i);
         for (int j =  0; j < sizeof(process_ptr[i]->page_table)/sizeof(*process_ptr[i]->page_table); j++){
             char ref;
             char swap;
             char modify;
             if (! process_ptr[i] -> page_table[j].present){
                 if (process_ptr[i] -> page_table[j].paged_out){
-                    cout << "# ";
+                    cout << " #";
                     continue;
                 }
                 else{
-                    cout << "* ";
+                    cout << " *";
                     continue;
                 }
             }
@@ -608,7 +609,7 @@ void print_page_t(vector<Process*> process_ptr){
                 }
             }
 
-            printf("%d:%c%c%c ", j, ref, modify, swap );
+            printf(" %d:%c%c%c", j, ref, modify, swap );
         }
         cout << endl;
     }
@@ -851,7 +852,7 @@ int main(int argc, char** argv){
     for (int i = 0; i < instruction_char.size(); i++){
         count_inst++;
         if (ohno){
-            printf("%d: ==> %c %d \n", i, instruction_char[i], instruction_int[i]);
+            printf("%d: ==> %c %d\n", i, instruction_char[i], instruction_int[i]);
         }
         
         if (instruction_char[i] == 'c'){
@@ -868,6 +869,10 @@ int main(int argc, char** argv){
         else if (instruction_char[i] == 'e'){
             cost += 1250;
             process_exits++;
+            if (ohno){
+                printf("EXIT current process %d\n", current_process->pid);
+            }
+            
             for (int j = 0; j < sizeof(current_process->page_table) / sizeof(*current_process->page_table); j++){
                 if (current_process->page_table[j].mapped){
                     free_list.push(&frame_table[current_process->page_table[j].physical_frame]); 
