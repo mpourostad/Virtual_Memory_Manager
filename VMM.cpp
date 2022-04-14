@@ -192,15 +192,17 @@ void unmap_exit(PTE *pte, Process *ptr, int vpage){
             
             cost += 2400;
             ptr->fouts++;
+
         }
         
     }
     pte ->paged_out = 0;
-    pte->modified = 0;
+    // pte->modified = 0;
     pte -> referenced = 0;
     pte->physical_frame = 0;
     pte ->present = 0;
     pte->mapped = 0;
+    
 }
 class Pager {
     public:
@@ -257,10 +259,10 @@ class Clock:public Pager{
 
 class NRU: public Pager{
     Frame *select_victim_frame(){
-        // bool class0;
-        bool class1;
-        bool class2;
-        bool class3;
+        bool class0 = false;
+        bool class1 = false;
+        bool class2 = false;
+        bool class3 = false;
         Frame *frame_class0 = nullptr;
         Frame *frame_class1 = nullptr;
         Frame *frame_class2 = nullptr;
@@ -273,15 +275,30 @@ class NRU: public Pager{
         bool reset = false;
         if (count_inst >= 50){
             count_inst = 0;
-            daemon();
+            reset = true;
         }
+        // if (count_inst >= 50){
+        //     count_inst = 0;
+        //     daemon();
+        // }
+        // cout << "hand " << hand << endl;
+        // cout << "count_inst " << count_inst << endl;
         int flag = hand;
         while(true){
+            // if (reset){
+            //     frame_table[hand].p->page_table[frame_table[hand].virtual_address].referenced = 0;
+            // }
             int ref_bit = frame_table[hand].p->page_table[frame_table[hand].virtual_address].referenced;
             int mod_bit = frame_table[hand].p->page_table[frame_table[hand].virtual_address].modified;
-            if (2 * ref_bit + mod_bit ==  0){
+            if (2 * ref_bit + mod_bit ==  0 && !reset){
                 frame_class0 = &frame_table[hand];
                 break;
+            }
+            if (2 * ref_bit + mod_bit ==  0 && reset){
+                if (!class0){
+                    frame_class0 = &frame_table[hand];
+                    class0 = true;
+                }
             }
             if (2 * ref_bit + mod_bit ==  1){
                 if (!class1){
@@ -303,6 +320,9 @@ class NRU: public Pager{
                     class3 = true;
                 }
                 
+            }
+            if (reset){
+                frame_table[hand].p->page_table[frame_table[hand].virtual_address].referenced = 0;
             }
             hand++;
             if (hand >= frame_size){
@@ -327,6 +347,8 @@ class NRU: public Pager{
         else{
             cout << "I'm screwed" << endl;
         }
+        // cout << "ref " << victim->p->page_table[victim->virtual_address].referenced << endl;
+        // cout << "mod " << victim->p->page_table[victim->virtual_address].modified<< endl;
         victim->p->unmaps++;
         PTE *pte = &victim->p->page_table[victim->virtual_address];
         unmap(pte, victim->p, victim->virtual_address);
@@ -804,12 +826,14 @@ int main(int argc, char** argv){
                     free_list.push(&frame_table[current_process->page_table[j].physical_frame]); 
                     frame_table[current_process->page_table[j].physical_frame].p = nullptr;
                     frame_table[current_process->page_table[j].physical_frame].virtual_address = 0;
+                    // frame_table[current_process->page_table[j].physical_frame].current_time = count_inst;
                     unmap_exit(&current_process->page_table[j], current_process, j);
                     current_process->unmaps++;
                     
                     
                 }
                 else{
+
                     current_process->page_table[j].paged_out = 0;
                     current_process->page_table[j].modified = 0;
                     current_process->page_table[j].referenced = 0;
