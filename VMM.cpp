@@ -197,7 +197,7 @@ void unmap_exit(PTE *pte, Process *ptr, int vpage){
         
     }
     pte ->paged_out = 0;
-    // pte->modified = 0;
+    pte->modified = 0;
     pte -> referenced = 0;
     pte->physical_frame = 0;
     pte ->present = 0;
@@ -359,11 +359,11 @@ class NRU: public Pager{
 
 
     }
-    void daemon(){
-        for (int i = 0; i < frame_size; i++){
-            frame_table[i].p->page_table[frame_table[i].virtual_address].referenced = 0;
-        }
-    }
+    // void daemon(){
+    //     for (int i = 0; i < frame_size; i++){
+    //         frame_table[i].p->page_table[frame_table[i].virtual_address].referenced = 0;
+    //     }
+    // }
 };
 class Aging: public Pager{
     public:
@@ -434,35 +434,45 @@ class Working_set: public Pager{
        int flag =  hand;
        int index= 0;
        Frame *frame = &frame_table[hand];
+        // Frame *frame_oldest = nullptr;
+        // Frame *frame_curr = nullptr;
+        bool empt = true;
        unsigned int oldest = numeric_limits<unsigned int>::max();
-       for (int i = 0; i < frame_size; i++){
-           if (frame_table[i].p->page_table[frame_table[i].virtual_address].referenced){
-               frame_table[i].p->page_table[frame_table[i].virtual_address].referenced = 0;
-               frame_table[i].current_time = count_inst;
+    //    for (int i = 0; i < frame_size; i++){
+    //        if (frame_table[i].p->page_table[frame_table[i].virtual_address].referenced){
+    //            frame_table[i].p->page_table[frame_table[i].virtual_address].referenced = 0;
+    //            frame_table[i].current_time = count_inst;
 
-           }
-       }
+    //        }
+    //    }
     //    cout << "hand " << hand<< endl;
        while(true){
         //    cout << "hand " << hand<< endl;
-        //    if (frame_table[hand].p->page_table[frame_table[hand].virtual_address].referenced){
-        //        frame_table[hand].p->page_table[frame_table[hand].virtual_address].referenced = 0;
-        //        frame_table[hand].current_time = count_inst;
+            if (frame_table[hand].p->page_table[frame_table[hand].virtual_address].referenced){
+                frame_table[hand].p->page_table[frame_table[hand].virtual_address].referenced = 0;
+                frame_table[hand].current_time = count_inst;
 
-        //    }
-           if (count_inst - frame_table[hand].current_time > 50){
+            }
+           if (count_inst - frame_table[hand].current_time >= 50 ){
+            //    cout << "curr_time " << frame_table[hand].current_time << endl;
             //    cout << "instruction more than 50" << endl;
+                // if (empt){
+                //     frame_curr = &frame_table[hand];
+                //     empt = false;
+                // }
                frame = &frame_table[hand];
                break;
            }
            else {
                if (frame_table[hand].current_time < oldest){
-                   frame = &frame_table[hand];
+                //    frame_oldest = &frame_table[hand];
                    oldest = frame_table[hand].current_time;
-                //    cout << "I'm the oldest" << endl;
+                   frame = &frame_table[hand];
+                //    cout << "index " << frame->frame_index << " TLU " << frame->current_time << endl;
                }
            }
            hand++;
+        
             if (hand >= frame_size){
                 hand = 0;
             }
@@ -470,13 +480,20 @@ class Working_set: public Pager{
                 break;
             }
        }
+    //    Frame *frame;
+    //    if (frame_curr != nullptr){
+    //        frame = frame_curr;
+    //    }
+    //    else{
+    //        frame = frame_oldest;
+    //    }
        hand = frame->frame_index;
        frame->p->unmaps++;
        PTE *pte = &frame->p->page_table[frame->virtual_address];
        unmap(pte, frame->p, frame->virtual_address);
        frame->p = nullptr;
        frame->virtual_address = 0;
-       frame->current_time = count_inst;
+       frame->current_time = 0;
        return frame;
 
     }
@@ -826,7 +843,7 @@ int main(int argc, char** argv){
                     free_list.push(&frame_table[current_process->page_table[j].physical_frame]); 
                     frame_table[current_process->page_table[j].physical_frame].p = nullptr;
                     frame_table[current_process->page_table[j].physical_frame].virtual_address = 0;
-                    // frame_table[current_process->page_table[j].physical_frame].current_time = count_inst;
+                    frame_table[current_process->page_table[j].physical_frame].current_time = count_inst;
                     unmap_exit(&current_process->page_table[j], current_process, j);
                     current_process->unmaps++;
                     
@@ -856,8 +873,9 @@ int main(int argc, char** argv){
             cost++;
             continue;
         }
+        Frame *frame;
         if ( ! pte->present) {
-            Frame *frame;
+            
             frame = allocate_frame();
             if (frame == nullptr){
                 frame = the_Pager->select_victim_frame();
@@ -902,10 +920,12 @@ int main(int argc, char** argv){
             current_process->maps++;
             pte ->mapped = 1;
             the_Pager->reset_age(frame);
+            
             // else if (pte -> mapped){
             //     cout << 
             // }
         }
+        frame->current_time = count_inst;
         if (instruction_char[i] == 'r'){
             pte->referenced = 1;
             cost ++;
