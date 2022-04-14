@@ -120,37 +120,23 @@ Frame::Frame(){
 }
 Frame frame_table[MAX_FRAMES];
 queue <Frame*> free_list;
-// queue <FrameTable*> used_list;
 Frame *allocate_frame (){
-    // for (int i = 0; i < sizeof(frame_table_array)/sizeof(*frame_table_array); i++){
-    //     if (frame_table_array[i].mapped == 0){
-    //         return &frame_table_array[i];
-    //     }
-
-    // }
     Frame *f_ptr;
     if (!free_list.empty()){
         f_ptr  = free_list.front();
         free_list.pop();
-        // used_list.push(f_ptr);
         return f_ptr;
     }
     
     return nullptr;
 }
 void unmap(PTE *pte, Process *ptr, int vpage){
-    // for (int i = 0; i < ptr->vma.size(); i++){
-    //     if (vpage >= ptr->vma[i]->start_page && vpage <= ptr->vma[i]->end_page ){
-
-    //     }
-    // }
     cost += 400;
     if (ohno){
         printf(" UNMAP %d:%d\n", ptr->pid, vpage);
     }
     
     if (pte->modified){
-        // pte->paged_out = 1;
         if (pte -> file_mapped){
             if (ohno){
                  cout << " FOUT" << endl;
@@ -184,7 +170,6 @@ void unmap_exit(PTE *pte, Process *ptr, int vpage){
     }
     
     if (pte->modified){
-        // pte->paged_out = 1;
         if (pte -> file_mapped){
             if (ohno){
                 cout << " FOUT" << endl;
@@ -221,8 +206,6 @@ class FIFO: public Pager{
         frame_table[hand].p->unmaps++;
         PTE *pte = &frame_table[hand].p->page_table[frame_table[hand].virtual_address];
         unmap(pte, frame_table[hand].p, frame_table[hand].virtual_address);
-        
-        // frame_table[hand].p->page_table[frame_table[hand].virtual_address].present = 0;
         frame_table[hand].p = nullptr;
         frame_table[hand].virtual_address = 0;
         return &frame_table[hand];
@@ -232,14 +215,12 @@ class FIFO: public Pager{
 class Clock:public Pager{
     Frame *select_victim_frame(){
         if (hand >= frame_size - 1){
-            // cout << "this" << endl;
             hand = -1;
         }
         
         hand++;
         
         while(frame_table[hand].p->page_table[frame_table[hand].virtual_address].referenced){
-            // cout << "hand: " << hand << "referenced: " << frame_table[hand].p->page_table[frame_table[hand].virtual_address].referenced << endl;
             
             frame_table[hand].p->page_table[frame_table[hand].virtual_address].referenced = 0;
             hand++;
@@ -277,17 +258,8 @@ class NRU: public Pager{
             count_inst = 0;
             reset = true;
         }
-        // if (count_inst >= 50){
-        //     count_inst = 0;
-        //     daemon();
-        // }
-        // cout << "hand " << hand << endl;
-        // cout << "count_inst " << count_inst << endl;
         int flag = hand;
         while(true){
-            // if (reset){
-            //     frame_table[hand].p->page_table[frame_table[hand].virtual_address].referenced = 0;
-            // }
             int ref_bit = frame_table[hand].p->page_table[frame_table[hand].virtual_address].referenced;
             int mod_bit = frame_table[hand].p->page_table[frame_table[hand].virtual_address].modified;
             if (2 * ref_bit + mod_bit ==  0 && !reset){
@@ -347,8 +319,6 @@ class NRU: public Pager{
         else{
             cout << "I'm screwed" << endl;
         }
-        // cout << "ref " << victim->p->page_table[victim->virtual_address].referenced << endl;
-        // cout << "mod " << victim->p->page_table[victim->virtual_address].modified<< endl;
         victim->p->unmaps++;
         PTE *pte = &victim->p->page_table[victim->virtual_address];
         unmap(pte, victim->p, victim->virtual_address);
@@ -359,11 +329,6 @@ class NRU: public Pager{
 
 
     }
-    // void daemon(){
-    //     for (int i = 0; i < frame_size; i++){
-    //         frame_table[i].p->page_table[frame_table[i].virtual_address].referenced = 0;
-    //     }
-    // }
 };
 class Aging: public Pager{
     public:
@@ -371,7 +336,6 @@ class Aging: public Pager{
        set_age();
        Frame *frame;
        unsigned int lowest_bit = numeric_limits<unsigned int>::max();
-    //    cout << "lowest_bit " << lowest_bit << endl;
        if (hand >= frame_size - 1){
             hand = -1;
         }
@@ -380,24 +344,18 @@ class Aging: public Pager{
        int index= 0;
 
        while(true){
-            // cout << "hand " << hand << endl;
-            // cout << "age " << frame_table[hand].age << endl;
             if (frame_table[hand].age < lowest_bit){
-                // cout << "here " << endl;
                lowest_bit = frame_table[hand].age;
                frame = &frame_table[hand];
                index = hand;
             }
             hand++;
             if (hand > frame_size - 1){
-                // cout << "here" << endl;
                 hand = 0;
             }
             if ( hand == flag ){
-                // cout << "this " << endl;
                 break;
             }
-           
         }
         hand = index;
         frame->p->unmaps++;
@@ -417,7 +375,6 @@ class Aging: public Pager{
                 
                 frame_table[i].age = (frame_table[i].age | 0x80000000 );
                 frame_table[i].p->page_table[frame_table[i].virtual_address].referenced = 0;
-                // cout << "frame_table " << i << " " <<  "age " << frame_table[i].age << endl;
             }
         }
     }
@@ -434,41 +391,21 @@ class Working_set: public Pager{
        int flag =  hand;
        int index= 0;
        Frame *frame = &frame_table[hand];
-        // Frame *frame_oldest = nullptr;
-        // Frame *frame_curr = nullptr;
         bool empt = true;
        unsigned int oldest = numeric_limits<unsigned int>::max();
-    //    for (int i = 0; i < frame_size; i++){
-    //        if (frame_table[i].p->page_table[frame_table[i].virtual_address].referenced){
-    //            frame_table[i].p->page_table[frame_table[i].virtual_address].referenced = 0;
-    //            frame_table[i].current_time = count_inst;
-
-    //        }
-    //    }
-    //    cout << "hand " << hand<< endl;
        while(true){
-        //    cout << "hand " << hand<< endl;
             if (frame_table[hand].p->page_table[frame_table[hand].virtual_address].referenced){
                 frame_table[hand].p->page_table[frame_table[hand].virtual_address].referenced = 0;
                 frame_table[hand].current_time = count_inst;
-
             }
            if (count_inst - frame_table[hand].current_time >= 50 ){
-            //    cout << "curr_time " << frame_table[hand].current_time << endl;
-            //    cout << "instruction more than 50" << endl;
-                // if (empt){
-                //     frame_curr = &frame_table[hand];
-                //     empt = false;
-                // }
                frame = &frame_table[hand];
                break;
            }
            else {
                if (frame_table[hand].current_time < oldest){
-                //    frame_oldest = &frame_table[hand];
                    oldest = frame_table[hand].current_time;
                    frame = &frame_table[hand];
-                //    cout << "index " << frame->frame_index << " TLU " << frame->current_time << endl;
                }
            }
            hand++;
@@ -480,13 +417,6 @@ class Working_set: public Pager{
                 break;
             }
        }
-    //    Frame *frame;
-    //    if (frame_curr != nullptr){
-    //        frame = frame_curr;
-    //    }
-    //    else{
-    //        frame = frame_oldest;
-    //    }
        hand = frame->frame_index;
        frame->p->unmaps++;
        PTE *pte = &frame->p->page_table[frame->virtual_address];
@@ -519,15 +449,6 @@ class Random: public Pager{
         return frame;
     }
 };
-void set_accessed_bit(Process *ptr, int vpage){
-    for (int j = 0; j < ptr->vma.size(); j++){
-        if (vpage >= ptr->vma[j]->start_page && vpage <= ptr->vma[j]->end_page ){
-            // return true;
-            ptr -> page_table[vpage].accessed = 1;
-        }
-    }
-    // return false;
-}
 void print_stats(vector <Process*> proc){
     for (int i = 0; i < proc.size(); i++){
         printf("PROC[%d]: U=%lu M=%lu I=%lu O=%lu FI=%lu FO=%lu Z=%lu SV=%lu SP=%lu\n",
@@ -599,7 +520,6 @@ void set_bits(Process *ptr, unsigned int vpage){
         if (vpage >= ptr->vma[j]->start_page && vpage <= ptr->vma[j]->end_page ){
             ptr -> page_table[vpage].accessed = 1;
             if (ptr->vma[j]->filemapped ){
-                // return true;
                 ptr -> page_table[vpage].file_mapped = 1;
             }
             if (ptr->vma[j]->write_protected ){
@@ -609,20 +529,6 @@ void set_bits(Process *ptr, unsigned int vpage){
 
         }
     }
-    // return false;
-
-}
-void set_write_protected_bit(Process *ptr, unsigned int vpage){
-    for (int j = 0; j < ptr->vma.size(); j++){
-        if (vpage >= ptr->vma[j]->start_page && vpage <= ptr->vma[j]->end_page ){
-            if (ptr->vma[j]->write_protected ){
-                // return true;
-                ptr -> page_table[vpage].write_protect = 1;
-            }
-        }
-    }
-    // return false;
-
 }
 
 int main(int argc, char** argv){
@@ -631,9 +537,7 @@ int main(int argc, char** argv){
     count_inst = 0; 
     vector <char> instruction_char;
     vector <int> instruction_int;
-    // ifstream file(argv[4]);
     string str;
-    // vector < vector < int > > total_vma;
     vector <VMA*> total_vma;
     vector <int> vma;
     vector <Process*> process_ptr;
@@ -642,17 +546,14 @@ int main(int argc, char** argv){
     int num_p = -1;
     int num_vma = -1;
     ofs = 0;
-    // getting option args:
     int c;
     string o;
-    // int frame_size;
     bool print_PageTable = false;
     bool print_FrameTable = false;
     bool stats = false;
     ohno = false;
     char *get_pager = NULL;
     char* verbose = NULL;
-    // string options = NULL;
     while ((c = getopt (argc, argv, "f:a:o:")) != -1)
     
     switch (c)
@@ -693,7 +594,6 @@ int main(int argc, char** argv){
         abort ();
     }
     string options = string(verbose);
-    // cout << options << endl;
     if  (options.find('S') != string::npos){
         stats = true;
     }
@@ -708,21 +608,15 @@ int main(int argc, char** argv){
     }
     string filename_input;
     string filename_rand;
-    // int index = 0;
     for (int i = optind; i < argc; i++){
         string arg(argv[i]);
         if (arg.find("rfile") != string::npos){
             filename_rand = arg;
-            
-            // ifstream file(argv[i]);
         }
         else {
             filename_input = arg;
-            // index = i;
-            // cout << "filename_input " << filename_input << endl;
         }
-    }
-    // string filename_rand = argv[5]; 
+    } 
     
     ifstream r;
     r.open(filename_rand);
@@ -732,34 +626,22 @@ int main(int argc, char** argv){
     r.close();
     
     ifstream f;
-    // in.open(filename_input);
     f.open(filename_input);
     while (getline(f, str))
     {
-        // cout << "this " << endl;
         int n = str.length();
         char stoc [n + 1];
         strcpy(stoc, str.c_str());
         
         int success;
-        // int a, b, c, d;
         int start, end, w_p, m;
-        // if (success == 4){
         success = sscanf(stoc, "%u %u %u %u", &start, &end, &w_p, &m);
-        // if (num_vma != 0){
         if (success == 4){
-
-            
             VMA *v;
             v = new VMA(start, end, w_p, m);
             total_vma.push_back(v);
-            // total_vma.push_back(vma);
-            // vma.clear();
             num_vma --;
-
         }           
-           
-        // }        
         else if (success == 1){
             if (flag == 0){
                 sscanf(stoc, "%d", &num_p);
@@ -767,8 +649,6 @@ int main(int argc, char** argv){
             }
             else{
                 sscanf(stoc, "%d", &num_vma);
-                // cout << "num_vma " << num_vma << endl;
-                 
             }
         }
         if ( process_number == num_p){
@@ -782,9 +662,6 @@ int main(int argc, char** argv){
             
         }
         else if (num_vma == 0 && success == 4){
-            // to do: build a new Process class
-            // cout << "process _number" << process_number << endl;
-            
             Process *pcb;
             pcb =  new Process(process_number);
             for (int i = 0; i < total_vma.size(); i++){
@@ -803,22 +680,13 @@ int main(int argc, char** argv){
         free_list.push(&frame_table[i]);
     }
     
-    // string frame_num(frame_size);
-    // int frame_numbers = stoi(frame_num);
-    // cout << frame_size << endl;
-    // cout << "instruction_char_size " << instruction_char.size() << endl;
-
-   
-    
     // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ simulation
     Process *current_process;
-    // cost += instruction_char.size() - 1;
     for (int i = 0; i < instruction_char.size(); i++){
         count_inst++;
         if (ohno){
             printf("%d: ==> %c %d\n", i, instruction_char[i], instruction_int[i]);
         }
-        
         if (instruction_char[i] == 'c'){
             ctx_switches++;
             cost+= 130;
@@ -832,7 +700,6 @@ int main(int argc, char** argv){
         }
         else if (instruction_char[i] == 'e'){
             cost += 1250;
-            // count_inst = 0;
             process_exits++;
             if (ohno){
                 printf("EXIT current process %d\n", current_process->pid);
@@ -880,7 +747,6 @@ int main(int argc, char** argv){
             if (frame == nullptr){
                 frame = the_Pager->select_victim_frame();
             }
-            // pte->mapped = 1;
             pte->physical_frame = frame->frame_index;
             pte->present = 1;
             frame->p = current_process;
@@ -920,10 +786,6 @@ int main(int argc, char** argv){
             current_process->maps++;
             pte ->mapped = 1;
             the_Pager->reset_age(frame);
-            
-            // else if (pte -> mapped){
-            //     cout << 
-            // }
         }
         frame->current_time = count_inst;
         if (instruction_char[i] == 'r'){
@@ -945,9 +807,7 @@ int main(int argc, char** argv){
             cost ++;
             cost += 420;
             
-        }
-
-        
+        }       
     }
     if (print_PageTable){
         print_page_t(process_ptr);
@@ -960,20 +820,5 @@ int main(int argc, char** argv){
          printf("TOTALCOST %lu %lu %lu %llu %lu\n",
                 instruction_char.size(), ctx_switches, process_exits, cost, sizeof(process_ptr[0]->page_table) /MAX_VPAGES);
     }
-    
-    
-   
-    // while (get_next_instruction(&operation, &vpage)) {
-    // // handle special case of “c” and “e” instruction // now the real instructions for read and write pte_t *pte = &current_process->page_table[vpage]; if ( ! pte->present) {
-    // // this in reality generates the page fault exception and now you execute
-    // // verify this is actually a valid page in a vma if not raise error and next inst frame_t *newframe = get_frame();
-    // //-> figure out if/what to do with old frame if it was mapped
-    // // see general outline in MM-slides under Lab3 header and writeup below
-    // // see whether and how to bring in the content of the access page.
-    // }
-    // check write protection
-    // simulate instruction execution by hardware by updating the R/M PTE bits update_pte(read/modify) bits based on operations.
-
-
     return 0;
 }
